@@ -25,8 +25,9 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
             EndPoint endpoint,
             ISocketPoolConfiguration config,
             ISaslAuthenticationProvider authenticationProvider,
-            ILogger logger, IMetricFunctions metricFunctions)
-            : base(endpoint, config, logger, metricFunctions)
+            ILogger logger, IMetricFunctions metricFunctions,
+            bool useSslStream)
+            : base(endpoint, config, logger, metricFunctions, useSslStream)
         {
             this.authenticationProvider = authenticationProvider;
             _logger = logger;

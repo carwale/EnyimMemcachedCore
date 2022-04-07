@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Security;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -18,17 +19,20 @@ namespace Enyim.Caching.Memcached
         private readonly ILogger _logger;
 
         private bool _isAlive;
+        private bool _useSslStream;
         private Socket _socket;
         private readonly EndPoint _endpoint;
         private readonly int _connectionTimeout;
 
         private NetworkStream _inputStream;
         public DateTime LastConnectionTimestamp { get; set; }
+        private SslStream _sslStream;
 
-        public PooledSocket(EndPoint endpoint, TimeSpan connectionTimeout, TimeSpan receiveTimeout, ILogger logger)
+        public PooledSocket(EndPoint endpoint, TimeSpan connectionTimeout, TimeSpan receiveTimeout, ILogger logger, bool useSslStream)
         {
             _logger = logger;
             _isAlive = true;
+            _useSslStream = useSslStream;
 
             var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
@@ -92,7 +96,15 @@ namespace Enyim.Caching.Memcached
 
             if (success)
             {
-                _inputStream = new NetworkStream(_socket);
+                if (_useSslStream)
+                {
+                    _sslStream = new SslStream(new NetworkStream(_socket));
+                    _sslStream.AuthenticateAsClient(((DnsEndPoint)_endpoint).Host);
+                }
+                else
+                {
+                    _inputStream = new NetworkStream(_socket);
+                }
             }
             else
             {
@@ -144,7 +156,15 @@ namespace Enyim.Caching.Memcached
 
             if (success)
             {
-                _inputStream = new NetworkStream(_socket);
+                if (_useSslStream)
+                {
+                    _sslStream = new SslStream(new NetworkStream(_socket));
+                    await _sslStream.AuthenticateAsClientAsync(((DnsEndPoint)_endpoint).Host);
+                }
+                else
+                {
+                    _inputStream = new NetworkStream(_socket);
+                }
             }
             else
             {
@@ -254,7 +274,13 @@ namespace Enyim.Caching.Memcached
                         _inputStream.Dispose();
                     }
 
+                    if (_sslStream != null)
+                    {
+                        _sslStream.Dispose();
+                    }
+
                     _inputStream = null;
+                    _sslStream = null;
                     _socket = null;
                     this.CleanupCallback = null;
                 }
@@ -293,7 +319,7 @@ namespace Enyim.Caching.Memcached
 
             try
             {
-                return _inputStream.ReadByte();
+                return (_useSslStream ? _sslStream.ReadByte() : _inputStream.ReadByte());
             }
             catch (Exception ex)
             {
@@ -312,7 +338,7 @@ namespace Enyim.Caching.Memcached
 
             try
             {
-                return _inputStream.ReadByte();
+                return (_useSslStream ? _sslStream.ReadByte() : _inputStream.ReadByte());
             }
             catch (Exception ex)
             {
@@ -335,7 +361,7 @@ namespace Enyim.Caching.Memcached
             {
                 try
                 {
-                    int currentRead = await _inputStream.ReadAsync(buffer, offset, shouldRead);
+                    int currentRead = (_useSslStream ? await _sslStream.ReadAsync(buffer, offset, shouldRead) : await _inputStream.ReadAsync(buffer, offset, shouldRead));
                     if (currentRead == count)
                         break;
                     if (currentRead < 1)
@@ -375,7 +401,7 @@ namespace Enyim.Caching.Memcached
             {
                 try
                 {
-                    int currentRead = _inputStream.Read(buffer, offset, shouldRead);
+                    int currentRead = (_useSslStream ? _sslStream.Read(buffer, offset, shouldRead) : _inputStream.Read(buffer, offset, shouldRead));
                     if (currentRead == count)
                         break;
                     if (currentRead < 1)
@@ -400,15 +426,34 @@ namespace Enyim.Caching.Memcached
         {
             this.CheckDisposed();
 
-            SocketError status;
-
-            _socket.Send(data, offset, length, SocketFlags.None, out status);
-
-            if (status != SocketError.Success)
+            if (_useSslStream)
             {
-                _isAlive = false;
+                try
+                {
+                    _inputStream.Write(data, offset, length);
+                    _inputStream.Flush();
+                }
+                catch (Exception ex)
+                {
+                    if (ex is IOException || ex is SocketException)
+                    {
+                        _isAlive = false;
+                    }
+                    throw;
+                }
+            }
+            else
+            {
+                SocketError status;
 
-                ThrowHelper.ThrowSocketWriteError(_endpoint, status);
+                _socket.Send(data, offset, length, SocketFlags.None, out status);
+
+                if (status != SocketError.Success)
+                {
+                    _isAlive = false;
+
+                    ThrowHelper.ThrowSocketWriteError(_endpoint, status);
+                }
             }
         }
 
@@ -420,11 +465,22 @@ namespace Enyim.Caching.Memcached
 
             try
             {
-                _socket.Send(buffers, SocketFlags.None, out status);
-                if (status != SocketError.Success)
+                if (_useSslStream)
                 {
-                    _isAlive = false;
-                    ThrowHelper.ThrowSocketWriteError(_endpoint, status);
+                    foreach (var buf in buffers)
+                    {
+                        _sslStream.Write(buf.Array);
+                    }
+                    _sslStream.Flush();
+                }
+                else
+                {
+                    _socket.Send(buffers, SocketFlags.None, out status);
+                    if (status != SocketError.Success)
+                    {
+                        _isAlive = false;
+                        ThrowHelper.ThrowSocketWriteError(_endpoint, status);
+                    }
                 }
             }
             catch (Exception ex)
@@ -444,12 +500,23 @@ namespace Enyim.Caching.Memcached
 
             try
             {
-                var bytesTransferred = await _socket.SendAsync(buffers, SocketFlags.None);
-                if (bytesTransferred <= 0)
+                if (_useSslStream)
                 {
-                    _isAlive = false;
-                    _logger.LogError($"Failed to {nameof(PooledSocket.WriteAsync)}. bytesTransferred: {bytesTransferred}");
-                    ThrowHelper.ThrowSocketWriteError(_endpoint);
+                    foreach (var buf in buffers)
+                    {
+                        await _sslStream.WriteAsync(buf.Array, 0, buf.Count);
+                    }
+                    await _sslStream.FlushAsync();
+                }
+                else
+                {
+                    var bytesTransferred = await _socket.SendAsync(buffers, SocketFlags.None);
+                    if (bytesTransferred <= 0)
+                    {
+                        _isAlive = false;
+                        _logger.LogError($"Failed to {nameof(PooledSocket.WriteAsync)}. bytesTransferred: {bytesTransferred}");
+                        ThrowHelper.ThrowSocketWriteError(_endpoint);
+                    }
                 }
             }
             catch (Exception ex)

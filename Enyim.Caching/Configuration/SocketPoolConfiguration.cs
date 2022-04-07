@@ -10,6 +10,7 @@ namespace Enyim.Caching.Configuration
     {
         private int minPoolSize = 5;
         private int maxPoolSize = 100;
+        private bool useSslStream = false;
         private TimeSpan connectionTimeout = new TimeSpan(0, 0, 10);
         private TimeSpan connectionIdleTimeout = new TimeSpan(0, 0, 0);
         private TimeSpan receiveTimeout = new TimeSpan(0, 0, 10);
