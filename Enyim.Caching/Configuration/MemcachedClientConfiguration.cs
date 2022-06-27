@@ -213,7 +213,7 @@ namespace Enyim.Caching.Configuration
                     }
                     else
                     {
-                        _logger.LogInformation($"Memcached server address - {server.Address }:{server.Port}");
+                        _logger.LogInformation($"Memcached server address - {server.Address}:{server.Port}");
                     }
 
                     Servers.Add(new IPEndPoint(address, server.Port));
