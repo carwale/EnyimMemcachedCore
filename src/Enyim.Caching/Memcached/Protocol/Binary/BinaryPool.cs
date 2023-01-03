@@ -16,23 +16,23 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
     /// </summary>
     public class BinaryPool : DefaultServerPool
     {
-        readonly ISaslAuthenticationProvider authenticationProvider;
-        readonly IMemcachedClientConfiguration configuration;
+        readonly ISaslAuthenticationProvider _authenticationProvider;
+        readonly IMemcachedClientConfiguration _configuration;
         private readonly ILogger _logger;
         private readonly IMetricFunctions _metricFunctions;
 
         public BinaryPool(IMemcachedClientConfiguration configuration, ILogger logger, IMetricFunctions metricFunctions)
             : base(configuration, new BinaryOperationFactory(logger), logger, metricFunctions)
         {
-            this.authenticationProvider = GetProvider(configuration);
-            this.configuration = configuration;
+            _authenticationProvider = GetProvider(configuration);
+            _configuration = configuration;
             _logger = logger;
             _metricFunctions = metricFunctions;
         }
 
         protected override IMemcachedNode CreateNode(EndPoint endpoint)
         {
-            return new BinaryNode(endpoint, this.configuration.SocketPool, this.authenticationProvider, _logger, _metricFunctions, this.configuration.UseSslStream);
+            return new BinaryNode(endpoint, _configuration.SocketPool, _authenticationProvider, _logger,_metricFunctions, _configuration.UseSslStream);
         }
 
         private static ISaslAuthenticationProvider GetProvider(IMemcachedClientConfiguration configuration)
