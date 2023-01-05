@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using System.Linq;
 using System.Net.Sockets;
 using AEPLCore.Monitoring;
+using Enyim.Caching.Memcached.Transcoders;
 
 namespace Enyim.Caching.Configuration
 {
@@ -159,9 +160,14 @@ namespace Enyim.Caching.Configuration
             {
                 try
                 {
-                    if (options.Transcoder == "BinaryFormatterTranscoder")
+                    if (options.Transcoder == nameof(BinaryFormatterTranscoder))
+                    {
                         options.Transcoder = "Enyim.Caching.Memcached.Transcoders.BinaryFormatterTranscoder";
-
+                    }
+                    else if (options.Transcoder == nameof(MessagePackTranscoder))
+                    {
+                        options.Transcoder = "Enyim.Caching.Memcached.Transcoders.MessagePackTranscoder";
+                    }
                     var transcoderType = Type.GetType(options.Transcoder);
                     if (transcoderType != null)
                     {
@@ -177,7 +183,7 @@ namespace Enyim.Caching.Configuration
             else if (transcoder != null)
             {
                 _transcoder = transcoder;
-                _logger.LogDebug($"Use Transcoder Type : '{transcoder.ToString()}'");
+                _logger.LogDebug($"Use Transcoder Type : '{transcoder}'");
             }
 
             if (options.NodeLocatorFactory != null)
