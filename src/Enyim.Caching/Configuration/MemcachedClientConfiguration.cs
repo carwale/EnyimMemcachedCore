@@ -19,7 +19,7 @@ namespace Enyim.Caching.Configuration
     public class MemcachedClientConfiguration : IMemcachedClientConfiguration
     {
         // these are lazy initialized in the getters
-        private Type nodeLocator;
+        private Type _nodeLocator;
         private ITranscoder _transcoder;
         private IMemcachedKeyTransformer _keyTransformer;
         private ILogger<MemcachedClientConfiguration> _logger;
@@ -270,11 +270,11 @@ namespace Enyim.Caching.Configuration
         /// <remarks>If both <see cref="M:NodeLocator"/> and  <see cref="M:NodeLocatorFactory"/> are assigned then the latter takes precedence.</remarks>
         public Type NodeLocator
         {
-            get { return nodeLocator; }
+            get { return _nodeLocator; }
             set
             {
                 ConfigurationHelper.CheckForInterface(value, typeof(IMemcachedNodeLocator));
-                nodeLocator = value;
+                _nodeLocator = value;
             }
         }
 
