@@ -128,6 +128,7 @@ namespace Enyim.Caching.Configuration
             {
                 UseSslStream = options.UseSslStream;
             }
+            UseIPv6 = options.UseIPv6;
 
             if (!string.IsNullOrEmpty(options.KeyTransformer))
             {
@@ -206,7 +207,7 @@ namespace Enyim.Caching.Configuration
                     if (!IPAddress.TryParse(server.Address, out var address))
                     {
                         address = Dns.GetHostAddresses(server.Address)
-                            .FirstOrDefault(i => i.AddressFamily == AddressFamily.InterNetwork);
+                            .FirstOrDefault(i => i.AddressFamily == (options.UseIPv6 ? AddressFamily.InterNetworkV6 : AddressFamily.InterNetwork));
 
                         if (address == null)
                         {
@@ -353,6 +354,7 @@ namespace Enyim.Caching.Configuration
         }
 
         public bool UseSslStream { get; private set; }
+        public bool UseIPv6 { get; private set; }
 
         #endregion
     }

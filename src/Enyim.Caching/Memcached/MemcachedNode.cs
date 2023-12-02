@@ -38,11 +38,13 @@ namespace Enyim.Caching.Memcached
         private SemaphoreSlim poolInitSemaphore = new SemaphoreSlim(1, 1);
         private readonly TimeSpan _initPoolTimeout;
         private bool _useSslStream;
+        private bool _useIPv6;
 
         public MemcachedNode(
             EndPoint endpoint,
             ISocketPoolConfiguration socketPoolConfig,
-            ILogger logger, IMetricFunctions metricFunctions, bool useSslStream)
+            ILogger logger, IMetricFunctions metricFunctions, bool useSslStream,
+            bool useIPv6)
         {
             _endPoint = endpoint;
             _useSslStream = useSslStream;
@@ -64,6 +66,7 @@ namespace Enyim.Caching.Memcached
             _logger = logger;
             _metricFunctions = metricFunctions;
             _internalPoolImpl = new InternalPoolImpl(this, socketPoolConfig, _logger);
+            _useIPv6 = useIPv6;
         }
 
         public event Action<IMemcachedNode> Failed;
@@ -582,7 +585,7 @@ namespace Enyim.Caching.Memcached
                         socket.Reset();
 
                         message = "Socket was reset. " + socket.InstanceId;
-                            if (_isDebugEnabled) _logger.LogDebug(message);
+                        if (_isDebugEnabled) _logger.LogDebug(message);
 
                         result.Pass(message);
                         socket.UpdateLastUsed();
@@ -976,7 +979,7 @@ namespace Enyim.Caching.Memcached
         {
             try
             {
-                var ps = new PooledSocket(_endPoint, _config.ConnectionTimeout, _config.ReceiveTimeout, _logger, _useSslStream);
+                var ps = new PooledSocket(_endPoint, _config.ConnectionTimeout, _config.ReceiveTimeout, _logger, _useSslStream, _useIPv6);
                 ps.Connect();
                 return ps;
             }
@@ -992,7 +995,7 @@ namespace Enyim.Caching.Memcached
         {
             try
             {
-                var ps = new PooledSocket(_endPoint, _config.ConnectionTimeout, _config.ReceiveTimeout, _logger, _useSslStream);
+                var ps = new PooledSocket(_endPoint, _config.ConnectionTimeout, _config.ReceiveTimeout, _logger, _useSslStream, _useIPv6);
                 await ps.ConnectAsync();
                 return ps;
             }
