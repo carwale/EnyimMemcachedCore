@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Configuration;
 using System.Linq;
+using System.Net.Security;
 using System.Net.Sockets;
 using AEPLCore.Monitoring;
 using Enyim.Caching.Memcached.Transcoders;
@@ -128,6 +129,7 @@ namespace Enyim.Caching.Configuration
             {
                 UseSslStream = options.UseSslStream;
             }
+            SslClientAuth = options.SslClientAuth;
             UseIPv6 = options.UseIPv6;
 
             if (!string.IsNullOrEmpty(options.KeyTransformer))
@@ -355,6 +357,7 @@ namespace Enyim.Caching.Configuration
 
         public bool UseSslStream { get; private set; }
         public bool UseIPv6 { get; private set; }
+        public SslClientAuthenticationOptions SslClientAuth { get; private set; }
 
         #endregion
     }

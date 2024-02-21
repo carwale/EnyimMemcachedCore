@@ -32,7 +32,7 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
 
         protected override IMemcachedNode CreateNode(EndPoint endpoint)
         {
-            return new BinaryNode(endpoint, _configuration.SocketPool, _authenticationProvider, _logger,_metricFunctions, _configuration.UseSslStream, _configuration.UseIPv6);
+            return new BinaryNode(endpoint, _configuration.SocketPool, _authenticationProvider, _logger,_metricFunctions, _configuration.UseSslStream, _configuration.UseIPv6, _configuration.SslClientAuth);
         }
 
         private static ISaslAuthenticationProvider GetProvider(IMemcachedClientConfiguration configuration)
