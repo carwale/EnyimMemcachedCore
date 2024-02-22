@@ -9,25 +9,25 @@ namespace Enyim.Caching.Memcached
     /// <summary>
     /// This is a ketama-like consistent hashing based node locator. Used when no other <see cref="T:IMemcachedNodeLocator"/> is specified for the pool.
     /// </summary>
-    public sealed class DefaultNodeLocator : IMemcachedNodeLocator, IDisposable
+    public sealed class LegacyNodeLocator : IMemcachedNodeLocator, IDisposable
     {
         private readonly int _serverAddressMutations;
 
         // holds all server keys for mapping an item key to the server consistently
-        private ulong[] _keys;
+        private uint[] _keys;
         // used to lookup a server based on its key
-        private Dictionary<ulong, IMemcachedNode> _servers;
+        private Dictionary<uint, IMemcachedNode> _servers;
         private Dictionary<IMemcachedNode, bool> _deadServers;
         private List<IMemcachedNode> _allServers;
         private ReaderWriterLockSlim _serverAccessLock;
 
-        public DefaultNodeLocator() : this(1000)
+        public LegacyNodeLocator() : this(100)
         {
         }
 
-        public DefaultNodeLocator(int serverAddressMutations)
+        public LegacyNodeLocator(int serverAddressMutations)
         {
-            _servers = new Dictionary<ulong, IMemcachedNode>(new ULongEqualityComparer());
+            _servers = new Dictionary<uint, IMemcachedNode>(new UIntEqualityComparer());
             _deadServers = new Dictionary<IMemcachedNode, bool>();
             _allServers = new List<IMemcachedNode>();
             _serverAccessLock = new ReaderWriterLockSlim();
@@ -36,7 +36,7 @@ namespace Enyim.Caching.Memcached
 
         private void BuildIndex(List<IMemcachedNode> nodes)
         {
-            var keys = new ulong[nodes.Count * _serverAddressMutations];
+            var keys = new uint[nodes.Count * _serverAddressMutations];
 
             int nodeIdx = 0;
 
@@ -53,7 +53,7 @@ namespace Enyim.Caching.Memcached
                 nodeIdx += _serverAddressMutations;
             }
 
-            Array.Sort<ulong>(keys);
+            Array.Sort<uint>(keys);
             Interlocked.Exchange(ref _keys, keys);
         }
 
@@ -104,9 +104,8 @@ namespace Enyim.Caching.Memcached
                 // check if it's still dead or it came back
                 // while waiting for the write lock
                 if (!node.IsAlive)
-                {
                     _deadServers[node] = true;
-                }
+
                 BuildIndex(_allServers.Except(_deadServers.Keys).ToList());
             }
             finally
@@ -125,13 +124,11 @@ namespace Enyim.Caching.Memcached
         /// <returns></returns>
         private IMemcachedNode FindNode(string key)
         {
-            // key = string.Concat(key, "_m");
             if (_keys.Length == 0) return null;
 
-
-            ulong itemKeyHash = MurmurHash3.Hash(key);
+            uint itemKeyHash = BitConverter.ToUInt32(new FNV1a(false).ComputeHash(Encoding.UTF8.GetBytes(key)), 0);
             // get the index of the server assigned to this hash
-            int foundIndex = Array.BinarySearch<ulong>(_keys, itemKeyHash);
+            int foundIndex = Array.BinarySearch<uint>(_keys, itemKeyHash);
 
             // no exact match
             if (foundIndex < 0)
@@ -157,12 +154,12 @@ namespace Enyim.Caching.Memcached
             return _servers[_keys[foundIndex]];
         }
 
-        private static ulong[] GenerateKeys(IMemcachedNode node, int numberOfKeys)
+        private static uint[] GenerateKeys(IMemcachedNode node, int numberOfKeys)
         {
             const int KeyLength = 4;
             const int PartCount = 1; // (ModifiedFNV.HashSize / 8) / KeyLength; // HashSize is in bits, uint is 4 byte long
 
-            var k = new ulong[PartCount * numberOfKeys];
+            var k = new uint[PartCount * numberOfKeys];
 
             // every server is registered numberOfKeys times
             // using UInt32s generated from the different parts of the hash
@@ -171,14 +168,15 @@ namespace Enyim.Caching.Memcached
             // server will be stored with keys 0x0000aabb & 0x0000ccdd
             // (or a bit differently based on the little/big indianness of the host)
             string address = node.EndPoint.ToString();
+            var fnv = new FNV1a(false);
 
             for (int i = 0; i < numberOfKeys; i++)
             {
-                var data = MurmurHash3.Hash(String.Concat(address, "-", i));
+                byte[] data = fnv.ComputeHash(Encoding.UTF8.GetBytes(string.Concat(address, "-", i)));
 
                 for (int h = 0; h < PartCount; h++)
                 {
-                    k[i * PartCount + h] = BitConverter.ToUInt64(BitConverter.GetBytes(data), h * KeyLength);
+                    k[i * PartCount + h] = BitConverter.ToUInt32(data, h * KeyLength);
                 }
             }
 
