@@ -11,7 +11,6 @@ namespace Enyim.Caching.Memcached
     /// </summary>
     public sealed class DefaultNodeLocator : IMemcachedNodeLocator, IDisposable
     {
-        private readonly int _serverAddressMutations;
 
         // holds all server keys for mapping an item key to the server consistently
         private uint[] _keys;
@@ -139,6 +138,12 @@ namespace Enyim.Caching.Memcached
             }
 
             var nodeIp = _hrw.Nstr[nodeId];
+
+            if (!_hrw.Nodes.ContainsKey(nodeIp))
+            {
+                // if the node is not in the list, it's dead
+                return null;
+            }
 
             return _hrw.Nodes[nodeIp];
         }

@@ -26,19 +26,6 @@ namespace Enyim.Caching
             return low;
         }
 
-        public static void ComputeHash128(in ReadOnlySpan<byte> data, in Span<byte> target, uint seed = 0)
-        {
-            var (low, high) = ComputeHash128(data, seed);
-#if NET5_0_OR_GREATER
-            var a = BitConverter.TryWriteBytes(target, high);
-            var b = BitConverter.TryWriteBytes(target, low);
-            Debug.Assert(a && b);
-#else
-            BitConverter.GetBytes(high).CopyTo(target);
-            BitConverter.GetBytes(low).CopyTo(target);
-#endif
-        }
-
         public static (ulong low, ulong high) ComputeHash128(in ReadOnlySpan<byte> data, uint seed = 0)
         {
             const ulong c1 = 0x87c37b91114253d5L;

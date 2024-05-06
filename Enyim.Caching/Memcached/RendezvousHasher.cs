@@ -19,6 +19,7 @@ namespace Enyim.Caching.Memcached
             Nodes = new Dictionary<string, IMemcachedNode>();
             Nhash = new List<ulong>();
             Hash = hashFunction;
+            Nstr = new List<string>();
 
             // Assuming you want to assign positions based on order in the list
             for (int i = 0; i < nodes.Count; i++)
