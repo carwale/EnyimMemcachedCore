@@ -16,7 +16,7 @@ namespace Enyim.Caching.Memcached.LocatorFactories
 
         public IMemcachedNodeLocator Create()
         {
-            return new DefaultNodeLocator(_serverAddressMutations);
+            return new DefaultNodeLocator(MurmurHash3.Hash);
         }
 
         public void Initialize(Dictionary<string, string> parameters)

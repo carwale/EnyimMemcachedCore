@@ -11,7 +11,6 @@ namespace Enyim.Caching.Memcached
     /// </summary>
     public sealed class DefaultNodeLocator : IMemcachedNodeLocator, IDisposable
     {
-        private readonly int _serverAddressMutations;
 
         // holds all server keys for mapping an item key to the server consistently
         private uint[] _keys;
@@ -21,40 +20,28 @@ namespace Enyim.Caching.Memcached
         private List<IMemcachedNode> _allServers;
         private ReaderWriterLockSlim _serverAccessLock;
 
-        public DefaultNodeLocator() : this(100)
+        private Func<string, ulong> _hash;
+
+        private RendezvousHasher _hrw;
+
+        public DefaultNodeLocator() : this(MurmurHash3.Hash)
         {
         }
 
-        public DefaultNodeLocator(int serverAddressMutations)
+        public DefaultNodeLocator(Func<string, ulong> hash)
         {
             _servers = new Dictionary<uint, IMemcachedNode>(new UIntEqualityComparer());
             _deadServers = new Dictionary<IMemcachedNode, bool>();
             _allServers = new List<IMemcachedNode>();
+            _hash = hash;
             _serverAccessLock = new ReaderWriterLockSlim();
-            _serverAddressMutations = serverAddressMutations;
         }
 
         private void BuildIndex(List<IMemcachedNode> nodes)
         {
-            var keys = new uint[nodes.Count * _serverAddressMutations];
+            // build the rendezvous hasher here
+            _hrw = new RendezvousHasher(nodes, _hash);
 
-            int nodeIdx = 0;
-
-            foreach (IMemcachedNode node in nodes)
-            {
-                var tmpKeys = DefaultNodeLocator.GenerateKeys(node, _serverAddressMutations);
-
-                for (var i = 0; i < tmpKeys.Length; i++)
-                {
-                    _servers[tmpKeys[i]] = node;
-                }
-
-                tmpKeys.CopyTo(keys, nodeIdx);
-                nodeIdx += _serverAddressMutations;
-            }
-
-            Array.Sort<uint>(keys);
-            Interlocked.Exchange(ref _keys, keys);
         }
 
         void IMemcachedNodeLocator.Initialize(IList<IMemcachedNode> nodes)
@@ -117,6 +104,12 @@ namespace Enyim.Caching.Memcached
             return Locate(key);
         }
 
+        public static ulong XorShiftMult64(ulong x)
+        {
+            // Combine operations for readability (C# allows for more relaxed expression formatting)
+            return x ^ (x >> 12) ^ (x << 25) ^ (x >> 27) * 2685821657736338717UL;
+        }
+
         /// <summary>
         /// locates a node by its key
         /// </summary>
@@ -124,63 +117,35 @@ namespace Enyim.Caching.Memcached
         /// <returns></returns>
         private IMemcachedNode FindNode(string key)
         {
-            if (_keys.Length == 0) return null;
+            if (_hrw.Nodes.Count == 0) return null;
 
-            uint itemKeyHash = BitConverter.ToUInt32(new FNV1a().ComputeHash(Encoding.UTF8.GetBytes(key)), 0);
-            // get the index of the server assigned to this hash
-            int foundIndex = Array.BinarySearch<uint>(_keys, itemKeyHash);
+            if (_hrw.Nodes.Count == 1) return _hrw.Nodes.First().Value;
 
-            // no exact match
-            if (foundIndex < 0)
+            ulong keyHash = _hrw.Hash(key);
+
+            int nodeId = 0;
+
+            ulong maxHash = XorShiftMult64(keyHash ^ _hrw.Nhash[0]);
+
+            for (int i = 1; i < _hrw.Nhash.Count; i++)
             {
-                // this is the nearest server in the list
-                foundIndex = ~foundIndex;
-
-                if (foundIndex == 0)
+                ulong hash = XorShiftMult64(keyHash ^ _hrw.Nhash[i]);
+                if (hash > maxHash)
                 {
-                    // it's smaller than everything, so use the last server (with the highest key)
-                    foundIndex = _keys.Length - 1;
-                }
-                else if (foundIndex >= _keys.Length)
-                {
-                    // the key was larger than all server keys, so return the first server
-                    foundIndex = 0;
+                    nodeId = i;
+                    maxHash = hash;
                 }
             }
 
-            if (foundIndex < 0 || foundIndex > _keys.Length)
+            var nodeIp = _hrw.Nstr[nodeId];
+
+            if (!_hrw.Nodes.ContainsKey(nodeIp))
+            {
+                // if the node is not in the list, it's dead
                 return null;
-
-            return _servers[_keys[foundIndex]];
-        }
-
-        private static uint[] GenerateKeys(IMemcachedNode node, int numberOfKeys)
-        {
-            const int KeyLength = 4;
-            const int PartCount = 1; // (ModifiedFNV.HashSize / 8) / KeyLength; // HashSize is in bits, uint is 4 byte long
-
-            var k = new uint[PartCount * numberOfKeys];
-
-            // every server is registered numberOfKeys times
-            // using UInt32s generated from the different parts of the hash
-            // i.e. hash is 64 bit:
-            // 00 00 aa bb 00 00 cc dd
-            // server will be stored with keys 0x0000aabb & 0x0000ccdd
-            // (or a bit differently based on the little/big indianness of the host)
-            string address = node.EndPoint.ToString();
-            var fnv = new FNV1a();
-
-            for (int i = 0; i < numberOfKeys; i++)
-            {
-                byte[] data = fnv.ComputeHash(Encoding.UTF8.GetBytes(String.Concat(address, "-", i)));
-
-                for (int h = 0; h < PartCount; h++)
-                {
-                    k[i * PartCount + h] = BitConverter.ToUInt32(data, h * KeyLength);
-                }
             }
 
-            return k;
+            return _hrw.Nodes[nodeIp];
         }
 
         #region [ IDisposable                  ]

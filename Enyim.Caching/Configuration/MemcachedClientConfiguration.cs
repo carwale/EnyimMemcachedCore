@@ -195,10 +195,14 @@ namespace Enyim.Caching.Configuration
                 }
                 else
                 {
-                    _logger.LogInformation($"Memcached server address - {server.Address }:{server.Port}");
+                    _logger.LogInformation($"Memcached server address - {server.Address}:{server.Port}");
                 }
 
-                Servers.Add(new IPEndPoint(address, server.Port));
+                var serverIp = new IPEndPoint(address, server.Port);
+                if (!Servers.Contains(serverIp))
+                {
+                    Servers.Add(serverIp);
+                }
             }
         }
 
