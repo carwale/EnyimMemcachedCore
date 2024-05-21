@@ -128,7 +128,6 @@ namespace Enyim.Caching.Memcached
             // key = string.Concat(key, "_m");
             if (_keys.Length == 0) return null;
 
-
             ulong itemKeyHash = MurmurHash3.Hash(key);
             // get the index of the server assigned to this hash
             int foundIndex = Array.BinarySearch<ulong>(_keys, itemKeyHash);
