@@ -13,15 +13,15 @@ namespace Enyim.Caching.Memcached
 		private bool isInitialized;
 		private object initLock = new Object();
 
-		void IMemcachedNodeLocator.Initialize(IList<IMemcachedNode> nodes)
+		void IMemcachedNodeLocator.Initialize(IList<IMemcachedNode> nodes, IMemcachedNode gutterNode)
 		{
-            if (nodes.Count > 0)
-            {
-                node = nodes[0];
-            }
+			if (nodes.Count > 0)
+			{
+				node = nodes[0];
+			}
 
-            this.isInitialized = true;
-            /*if (this.isInitialized)
+			this.isInitialized = true;
+			/*if (this.isInitialized)
                 return;
 
 			// locking on this is rude but easy
@@ -37,16 +37,16 @@ namespace Enyim.Caching.Memcached
 
 				this.isInitialized = true;
 			}*/
-        }
+		}
 
 		IMemcachedNode IMemcachedNodeLocator.Locate(string key)
 		{
 			if (!this.isInitialized)
 				throw new InvalidOperationException("You must call Initialize first");
 
-            if (this.node == null) return null;
+			if (this.node == null) return null;
 
-            return this.node;
+			return this.node;
 		}
 
 		IEnumerable<IMemcachedNode> IMemcachedNodeLocator.GetWorkingNodes()

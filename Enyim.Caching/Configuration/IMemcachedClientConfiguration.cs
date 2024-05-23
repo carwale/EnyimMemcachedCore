@@ -15,6 +15,8 @@ namespace Enyim.Caching.Configuration
         /// </summary>
         IList<EndPoint> Servers { get; }
 
+        EndPoint GutterServer { get; }
+
         /// <summary>
         /// Gets the configuration of the socket pool.
         /// </summary>

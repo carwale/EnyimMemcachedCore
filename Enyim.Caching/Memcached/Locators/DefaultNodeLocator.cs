@@ -3,6 +3,8 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;
+using Consul;
+using System.Net;
 
 namespace Enyim.Caching.Memcached
 {
@@ -17,6 +19,7 @@ namespace Enyim.Caching.Memcached
         private ulong[] _keys;
         // used to lookup a server based on its key
         private Dictionary<ulong, IMemcachedNode> _servers;
+        private IMemcachedNode _gutterServer;
         private Dictionary<IMemcachedNode, bool> _deadServers;
         private List<IMemcachedNode> _allServers;
         private ReaderWriterLockSlim _serverAccessLock;
@@ -57,13 +60,14 @@ namespace Enyim.Caching.Memcached
             Interlocked.Exchange(ref _keys, keys);
         }
 
-        void IMemcachedNodeLocator.Initialize(IList<IMemcachedNode> nodes)
+        void IMemcachedNodeLocator.Initialize(IList<IMemcachedNode> nodes, IMemcachedNode gutterNode)
         {
             _serverAccessLock.EnterWriteLock();
 
             try
             {
                 _allServers = nodes.ToList();
+                _gutterServer = gutterNode;
                 BuildIndex(_allServers);
             }
             finally
@@ -103,10 +107,22 @@ namespace Enyim.Caching.Memcached
             {
                 // check if it's still dead or it came back
                 // while waiting for the write lock
+                var useGutter = false;
+                string consulHost = Environment.GetEnvironmentVariable("CONSUL_HOST") ?? "127.0.0.1";
+                using (ConsulClient _client = new ConsulClient(c => c.Address = new Uri("http://" + consulHost + ":8500")))
+                {
+                    var useGutterKV = _client.KV.Get("cache/use-gutter")?.Result?.Response;
+                    if (useGutterKV != null && bool.TryParse(Encoding.UTF8.GetString(useGutterKV.Value), out useGutter))
+                    {
+                        if (!node.IsAlive && useGutter)
+                        {
+                            return _gutterServer;
+                        }
+                    }
+                }
                 if (!node.IsAlive)
                 {
                     _deadServers[node] = true;
-                }
                 BuildIndex(_allServers.Except(_deadServers.Keys).ToList());
             }
             finally
