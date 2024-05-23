@@ -17,7 +17,7 @@ namespace Enyim.Caching.Memcached
 		/// simultaneous calls to Initialize and Locate in a thread safe manner.</remarks>
 		/// <seealso cref="T:DefaultNodeLocator"/>
 		/// <seealso cref="T:KetamaNodeLocator"/>
-		void Initialize(IList<IMemcachedNode> nodes);
+		void Initialize(IList<IMemcachedNode> nodes, IMemcachedNode gutterNode);
 
 		/// <summary>
 		/// Returns the memcached node the specified key belongs to.

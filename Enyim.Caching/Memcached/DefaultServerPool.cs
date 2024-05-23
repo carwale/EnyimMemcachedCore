@@ -14,6 +14,7 @@ namespace Enyim.Caching.Memcached
         private readonly ILogger _logger;
 
         private IMemcachedNode[] allNodes;
+        private IMemcachedNode gutterNode;
 
         private readonly IMemcachedClientConfiguration configuration;
         private readonly IOperationFactory factory;
@@ -48,7 +49,7 @@ namespace Enyim.Caching.Memcached
             catch { }
         }
 
-        protected virtual IMemcachedNode CreateNode(EndPoint endpoint)
+        public virtual IMemcachedNode CreateNode(EndPoint endpoint)
         {
             return new MemcachedNode(endpoint, this.configuration.SocketPool, _logger);
         }
@@ -122,7 +123,7 @@ namespace Enyim.Caching.Memcached
                 {
                     if (isDebug) _logger.LogDebug("Reinitializing the locator.");
 
-                    this.nodeLocator.Initialize(aliveList);
+                    this.nodeLocator.Initialize(aliveList, gutterNode);
                 }
 
                 // stop or restart the timer
@@ -164,7 +165,7 @@ namespace Enyim.Caching.Memcached
 
                 // re-initialize the locator
                 var newLocator = this.configuration.CreateNodeLocator();
-                newLocator.Initialize(allNodes.Where(n => n.IsAlive).ToArray());
+                newLocator.Initialize(allNodes.Where(n => n.IsAlive).ToArray(), gutterNode);
                 Interlocked.Exchange(ref this.nodeLocator, newLocator);
 
                 // the timer is stopped until we encounter the first dead server
@@ -215,10 +216,11 @@ namespace Enyim.Caching.Memcached
                                     return node;
                                 }).
                                 ToArray();
+            this.gutterNode = this.CreateNode(this.configuration.GutterServer);
 
             // initialize the locator
             var locator = this.configuration.CreateNodeLocator();
-            locator.Initialize(allNodes);
+            locator.Initialize(allNodes, gutterNode);
 
             this.nodeLocator = locator;
         }
