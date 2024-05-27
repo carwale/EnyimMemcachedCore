@@ -124,6 +124,7 @@ namespace Enyim.Caching.Memcached
         /// <returns></returns>
         private IMemcachedNode FindNode(string key)
         {
+            key = string.Concat(key, "_f");
             if (_keys.Length == 0) return null;
 
             uint itemKeyHash = BitConverter.ToUInt32(new FNV1a().ComputeHash(Encoding.UTF8.GetBytes(key)), 0);
