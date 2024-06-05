@@ -14,6 +14,7 @@ namespace Enyim.Caching.Configuration
         public SocketPoolOptions SocketPool { get; set; }
 
         public List<Server> Servers { get; set; } = new List<Server>();
+        public Server GutterServer { get; set; }
 
         public Authentication Authentication { get; set; }
 
