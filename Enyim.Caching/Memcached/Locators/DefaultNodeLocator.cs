@@ -140,6 +140,7 @@ namespace Enyim.Caching.Memcached
         /// <returns></returns>
         private IMemcachedNode FindNode(string key)
         {
+            key = string.Concat(key, "_m");
             if (_keys.Length == 0) return null;
 
             ulong itemKeyHash = MurmurHash3.Hash(key);
