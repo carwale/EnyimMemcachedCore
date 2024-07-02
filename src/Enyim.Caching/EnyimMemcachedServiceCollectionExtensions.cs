@@ -15,6 +15,7 @@ namespace Microsoft.Extensions.DependencyInjection
 {
     public static class EnyimMemcachedServiceCollectionExtensions
     {
+#if NET5_0_OR_GREATER
         public static IServiceCollection AddEnyimMemcached(
             this IServiceCollection services,
             string sectionKey = "enyimMemcached",
@@ -33,6 +34,7 @@ namespace Microsoft.Extensions.DependencyInjection
             return services.AddEnyimMemcachedInternal(
                 s => s.AddOptions<MemcachedClientOptions>().BindConfiguration(sectionKey), asDistributedCache);
         }
+#endif
 
         public static IServiceCollection AddEnyimMemcached(
             this IServiceCollection services,
@@ -53,6 +55,7 @@ namespace Microsoft.Extensions.DependencyInjection
                 s => s.Configure(setupAction), asDistributedCache);
         }
 
+#if NET5_0_OR_GREATER
         public static IServiceCollection AddEnyimMemcached(
             this IServiceCollection services,
             IConfigurationSection configurationSection,
@@ -93,6 +96,7 @@ namespace Microsoft.Extensions.DependencyInjection
             return services.AddEnyimMemcachedInternal(
                 s => s.Configure<MemcachedClientOptions>(section), asDistributedCache);
         }
+#endif
 
         private static IServiceCollection AddEnyimMemcachedInternal(
             this IServiceCollection services,
@@ -116,6 +120,7 @@ namespace Microsoft.Extensions.DependencyInjection
             return services;
         }
 
+#if NET5_0_OR_GREATER
         public static IServiceCollection AddEnyimMemcached<T>(
             this IServiceCollection services,
             string sectionKey)
@@ -150,12 +155,13 @@ namespace Microsoft.Extensions.DependencyInjection
             }
 
             return services.AddEnyimMemcached<T>(
-               s => s.Configure<MemcachedClientOptions>(configuration.GetSection(sectionKey)));
+                s => s.Configure<MemcachedClientOptions>(configuration.GetSection(sectionKey)));
         }
+#endif
 
         public static IServiceCollection AddEnyimMemcached<T>(
-        this IServiceCollection services,
-        Action<IServiceCollection> configure)
+            this IServiceCollection services,
+            Action<IServiceCollection> configure)
         {
             services.AddOptions();
             configure?.Invoke(services);
