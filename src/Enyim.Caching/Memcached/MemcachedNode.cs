@@ -599,7 +599,7 @@ namespace Enyim.Caching.Memcached
                         socket.Reset();
 
                         message = "Socket was reset. " + retval.InstanceId;
-                        Console.WriteLine(message);
+                        _logger.LogInformation(message);
                         if (_isDebugEnabled) _logger.LogDebug(message);
 
                         result.Pass(message);
@@ -610,7 +610,6 @@ namespace Enyim.Caching.Memcached
                     catch (Exception e)
                     {
                         message = "Failed to reset an acquired socket.";
-                        Console.WriteLine(message);
                         _logger.LogError(message, e);
 
                         MarkAsDead();
@@ -646,7 +645,6 @@ namespace Enyim.Caching.Memcached
                 catch (Exception e)
                 {
                     message = "Failed to create socket. " + _endPoint;
-                    Console.WriteLine(message);
                     _logger.LogError(message, e);
 
                     // eventhough this item failed the failure policy may keep the pool alive
@@ -761,7 +759,6 @@ namespace Enyim.Caching.Memcached
                         _semaphore.Release();
 
                         message = "Failed to reset an acquired socket.";
-                        Console.WriteLine(message);
                         _logger.LogError(message, e);
                         result.Fail(message, e);
                         return result;
@@ -794,7 +791,6 @@ namespace Enyim.Caching.Memcached
                 catch (Exception e)
                 {
                     message = "Failed to create socket. " + _endPoint;
-                    Console.WriteLine(message);
                     _logger.LogError(message, e);
 
                     // eventhough this item failed the failure policy may keep the pool alive
