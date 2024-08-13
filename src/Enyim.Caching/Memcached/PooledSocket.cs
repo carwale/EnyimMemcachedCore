@@ -120,19 +120,21 @@ namespace Enyim.Caching.Memcached
 
             if (success)
             {
-#if NET5_0_OR_GREATER
                 if (_useSslStream)
                 {
                     _sslStream = new SslStream(new NetworkStream(_socket));
-                    _sslStream.AuthenticateAsClient(_sslClientAuthOptions);
+                    _sslStream.AuthenticateAsClient(
+#if NET5_0_OR_GREATER
+                        _sslClientAuthOptions
+#else
+                        ((DnsEndPoint)_endpoint).Host
+#endif
+                        );
                 }
                 else
                 {
                     _inputStream = new NetworkStream(_socket);
                 }
-#else
-                _inputStream = new NetworkStream(_socket);
-#endif
             }
             else
             {
@@ -185,19 +187,21 @@ namespace Enyim.Caching.Memcached
 
             if (success)
             {
-#if NET5_0_OR_GREATER
                 if (_useSslStream)
                 {
                     _sslStream = new SslStream(new NetworkStream(_socket));
-                    await _sslStream.AuthenticateAsClientAsync(_sslClientAuthOptions);
+                    await _sslStream.AuthenticateAsClientAsync(
+#if NET5_0_OR_GREATER
+                        _sslClientAuthOptions
+#else
+                        ((DnsEndPoint)_endpoint).Host
+#endif
+                        );
                 }
                 else
                 {
                     _inputStream = new NetworkStream(_socket);
                 }
-#else
-                _inputStream = new NetworkStream(_socket);
-#endif
             }
             else
             {
