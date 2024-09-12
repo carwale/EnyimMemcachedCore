@@ -10,6 +10,9 @@ using System.Collections.Generic;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+#if NET6_0
+using Enyim.Caching.Tracing;
+# endif
 
 #if NET6_0
 using Enyim.Caching.Tracing;
