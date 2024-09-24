@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Globalization;
 
 namespace Enyim.Caching.Memcached.Protocol.Text
@@ -48,13 +49,15 @@ namespace Enyim.Caching.Memcached.Protocol.Text
 			ushort flags = UInt16.Parse(parts[2], CultureInfo.InvariantCulture);
 			int length = Int32.Parse(parts[3], CultureInfo.InvariantCulture);
 
-			byte[] allData = new byte[length];
+			var pool = ArrayPool<byte>.Shared;
+			byte[] allData = pool.Rent(length);
 			byte[] eod = new byte[2];
 
 			socket.Read(allData, 0, length);
 			socket.Read(eod, 0, 2); // data is terminated by \r\n
 
 			GetResponse retval = new GetResponse(parts[1], flags, cas, allData);
+			pool.Return(allData);
 
 			if (log.IsDebugEnabled)
 				log.DebugFormat("Received value. Data type: {0}, size: {1}.", retval.Item.Flags, retval.Item.Data.Count);
@@ -88,7 +91,7 @@ namespace Enyim.Caching.Memcached.Protocol.Text
 #region [ License information          ]
 /* ************************************************************
  * 
- *    Copyright (c) 2010 Attila Kiskó, enyim.com
+ *    Copyright (c) 2010 Attila Kiskï¿½, enyim.com
  *    
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
