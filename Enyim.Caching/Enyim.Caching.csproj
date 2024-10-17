@@ -11,6 +11,17 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <LangVersion>latest</LangVersion>
     <PackageReleaseNotes>
+      3.0.0-alpha-1
+      Breaking change: Remove support for netstandard2.0;netstandard2.1
+      Remove BinaryFormatterTranscoder 
+      ----------
+      3.0.0
+      Add connection idle timeoout
+      Breaking change: Remove support of netstandard2.0;netstandard2.1;net5.0;
+      ---------
+      2.1.1
+      Add null check for activity
+      ----------
       2.1.0
       Add ActivitySource
       ----------
