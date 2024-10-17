@@ -444,7 +444,7 @@ namespace Enyim.Caching.Memcached
                         try
                         {
                             using var source = new CancellationTokenSource(_connectionIdleTimeout);
-                            await reconcileAsync(source.Token).ConfigureAwait(false);
+                            await ReconcileAsync(source.Token).ConfigureAwait(false);
                         }
                         catch(Exception e)
                         {
@@ -455,7 +455,7 @@ namespace Enyim.Caching.Memcached
 
             }
 
-            private async Task reconcileAsync(CancellationToken cancellationToken)
+            private async Task ReconcileAsync(CancellationToken cancellationToken)
             {
                 // synchronize access to this method as only one clean routine should be run at a time
                 await _cleanSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
