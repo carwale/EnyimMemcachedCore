@@ -45,7 +45,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="MessagePack" Version="2.5.140"/>
+        <PackageReference Include="MessagePack" Version="2.5.187"/>
     </ItemGroup>
 
     <ItemGroup>
