@@ -26,6 +26,8 @@ namespace Enyim.Caching.Memcached
         private readonly IMetricFunctions _metricFunctions;
         private static readonly object SyncRoot = new Object();
         private bool _isDisposed;
+        private readonly IMetricFunctions _metricFunctions;
+
         private readonly EndPoint _endPoint;
         private readonly ISocketPoolConfiguration _config;
         private InternalPoolImpl _internalPoolImpl;
@@ -68,6 +70,7 @@ namespace Enyim.Caching.Memcached
             _metricFunctions = metricFunctions;
             _internalPoolImpl = new InternalPoolImpl(this, socketPoolConfig, _logger);
             _useIPv6 = useIPv6;
+            _metricFunctions = metricFunctions;
         }
 
         public event Action<IMemcachedNode> Failed;
@@ -413,7 +416,7 @@ namespace Enyim.Caching.Memcached
                                 break;
                         }
                     }
-                    
+
                     StartReconciliationTask();
 
                     StartReconciliationTask();
@@ -446,7 +449,7 @@ namespace Enyim.Caching.Memcached
                             using var source = new CancellationTokenSource(_connectionIdleTimeout);
                             await ReconcileAsync(source.Token).ConfigureAwait(false);
                         }
-                        catch(Exception e)
+                        catch (Exception e)
                         {
                             _logger.LogWarning("ReconciliationTaskFailed", new EventId(0), e);
                         }
@@ -498,7 +501,8 @@ namespace Enyim.Caching.Memcached
                                 _logger.LogInformation("{0} pool found session {1} to clean up", ownerNode, retval.InstanceId);
                                 retval.Destroy();
                             }
-                            else {
+                            else
+                            {
                                 lock (_freeItems)
                                     _freeItems.AddLast(retval);
                                 return;
@@ -1014,7 +1018,10 @@ namespace Enyim.Caching.Memcached
         {
             try
             {
-                return CreateSocketInternal();
+                var ps = new PooledSocket(_endPoint, _config.ConnectionTimeout, _config.ReceiveTimeout, _logger);
+                ps.Connect();
+                _metricFunctions.Inc("cache_connection_count", "Optimus");
+                return ps;
             }
             catch
             {
@@ -1046,7 +1053,10 @@ namespace Enyim.Caching.Memcached
         {
             try
             {
-                return await CreateSocketInternalAsync().ConfigureAwait(false);
+                var ps = new PooledSocket(_endPoint, _config.ConnectionTimeout, _config.ReceiveTimeout, _logger);
+                await ps.ConnectAsync();
+                _metricFunctions.Inc("cache_connection_count", "Optimus");
+                return ps;
             }
             catch
             {
