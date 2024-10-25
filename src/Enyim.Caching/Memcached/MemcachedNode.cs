@@ -315,6 +315,7 @@ namespace Enyim.Caching.Memcached
             private readonly EndPoint _endPoint;
             private readonly string _endPointStr;
             private readonly TimeSpan _queueTimeout;
+            private readonly string _endPointStr;
             private readonly TimeSpan _receiveTimeout;
             private readonly TimeSpan _connectionIdleTimeout;
             private SemaphoreSlim _semaphore;
@@ -343,6 +344,7 @@ namespace Enyim.Caching.Memcached
                 _endPoint = ownerNode.EndPoint;
                 _endPointStr = _endPoint.ToString().Replace("Unspecified/", string.Empty);
                 _queueTimeout = config.QueueTimeout;
+                _endPointStr = _endPoint.ToString().Replace("Unspecified/", string.Empty);
                 _receiveTimeout = config.ReceiveTimeout;
                 _connectionIdleTimeout = config.ConnectionIdleTimeout;
 
@@ -448,6 +450,10 @@ namespace Enyim.Caching.Memcached
                         {
                             using var source = new CancellationTokenSource(_connectionIdleTimeout);
                             await ReconcileAsync(source.Token).ConfigureAwait(false);
+                            lock (_freeItems)
+                            {
+                                _metricFunctions.Set("cache_connection_count", (ulong)(maxItems - _semaphore.CurrentCount + _freeItems.Count), _endPointStr);
+                            }
                         }
                         catch (Exception e)
                         {
@@ -1020,7 +1026,6 @@ namespace Enyim.Caching.Memcached
             {
                 var ps = new PooledSocket(_endPoint, _config.ConnectionTimeout, _config.ReceiveTimeout, _logger);
                 ps.Connect();
-                _metricFunctions.Inc("cache_connection_count", EndPointString);
                 return ps;
             }
             catch
@@ -1055,7 +1060,6 @@ namespace Enyim.Caching.Memcached
             {
                 var ps = new PooledSocket(_endPoint, _config.ConnectionTimeout, _config.ReceiveTimeout, _logger);
                 await ps.ConnectAsync();
-                _metricFunctions.Inc("cache_connection_count", EndPointString);
                 return ps;
             }
             catch
