@@ -121,7 +121,6 @@ namespace Enyim.Caching.Memcached
                     }
                 }
                 if (!node.IsAlive)
-                {
                     _deadServers[node] = true;
                 BuildIndex(_allServers.Except(_deadServers.Keys).ToList());
             }
