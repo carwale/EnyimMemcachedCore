@@ -782,7 +782,12 @@ namespace Enyim.Caching
             {
                 CacheItem item;
 
-                try
+                try 
+                { 
+                    item = _transcoder.Serialize(value); 
+                    item.Data = ZSTDCompression.Compress(item.Data, _logger);
+                }
+                catch (Exception e)
                 {
                     item = _transcoder.Serialize(value);
                     item.Data = ZSTDCompression.Compress(item.Data, _logger);
@@ -852,9 +857,9 @@ namespace Enyim.Caching
             {
                 CacheItem item;
 
-                try
-                {
-                    item = _transcoder.Serialize(value);
+                try 
+                { 
+                    item = _transcoder.Serialize(value); 
                     item.Data = ZSTDCompression.Compress(item.Data, _logger);
                 }
                 catch (Exception e)
