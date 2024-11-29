@@ -1488,8 +1488,7 @@ namespace Enyim.Caching
 
         public async Task<IDictionary<string, CasResult<object>>> GetWithCasAsync(IEnumerable<string> keys)
         {
-            return await PerformMultiGetAsync(keys, (mget, kvp) =>
-            {
+            return await PerformMultiGetAsync(keys, (mget, kvp) => {
                 var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
                 var decompressedCacheItem = new CacheItem(kvp.Value.Flags, decompressedBytes);
                 return new CasResult<object>
