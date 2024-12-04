@@ -11,10 +11,6 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <LangVersion>latest</LangVersion>
     <PackageReleaseNotes>
-      3.0.0-alpha-1
-      Breaking change: Remove support for netstandard2.0;netstandard2.1
-      Remove BinaryFormatterTranscoder 
-      ----------
       3.0.0
       Add connection idle timeoout
       Add Gauge Metric for Active Connections
