@@ -61,6 +61,8 @@ namespace Enyim.Caching.Configuration
 
             ConfigureServers(options);
 
+            GutterServer = new IPEndPoint(ResolveServerAddress(options.GutterServer.Address), options.GutterServer.Port);
+
             SocketPool = new SocketPoolConfiguration();
             if (options.SocketPool != null)
             {
@@ -181,6 +183,22 @@ namespace Enyim.Caching.Configuration
             }
         }
 
+        private IPAddress ResolveServerAddress(string serverAddress)
+        {
+            var address = Dns.GetHostAddresses(serverAddress)
+                        .FirstOrDefault(i => i.AddressFamily == AddressFamily.InterNetwork);
+
+            if (address == null)
+            {
+                _logger.LogError($"Could not resolve host '{serverAddress}'.");
+            }
+            else
+            {
+                _logger.LogInformation($"Memcached server address - {address}");
+            }
+            return address;
+        }
+
         private void ConfigureServers(MemcachedClientOptions options)
         {
             Servers = new List<EndPoint>();
@@ -188,21 +206,11 @@ namespace Enyim.Caching.Configuration
             {
                 if (!IPAddress.TryParse(server.Address, out var address))
                 {
-                    address = Dns.GetHostAddresses(server.Address)
-                        .FirstOrDefault(i => i.AddressFamily == AddressFamily.InterNetwork);
-
-                    if (address == null)
-                    {
-                        _logger.LogError($"Could not resolve host '{server.Address}'.");
-                    }
-                    else
-                    {
-                        _logger.LogInformation($"Memcached server address - {address}");
-                    }
+                    address = ResolveServerAddress(server.Address);
                 }
                 else
                 {
-                    _logger.LogInformation($"Memcached server address - {server.Address }:{server.Port}");
+                    _logger.LogInformation($"Memcached server address - {server.Address}:{server.Port}");
                 }
 
                 Servers.Add(new IPEndPoint(address, server.Port));
@@ -232,6 +240,7 @@ namespace Enyim.Caching.Configuration
         /// Gets a list of <see cref="T:IPEndPoint"/> each representing a Memcached server in the pool.
         /// </summary>
         public IList<EndPoint> Servers { get; private set; }
+        public EndPoint GutterServer { get; private set; }
 
         /// <summary>
         /// Gets the configuration of the socket pool.
@@ -291,6 +300,11 @@ namespace Enyim.Caching.Configuration
         IList<EndPoint> IMemcachedClientConfiguration.Servers
         {
             get { return this.Servers; }
+        }
+
+        EndPoint IMemcachedClientConfiguration.GutterServer
+        {
+            get { return this.GutterServer; }
         }
 
         ISocketPoolConfiguration IMemcachedClientConfiguration.SocketPool

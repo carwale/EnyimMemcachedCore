@@ -30,7 +30,7 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
             _metricFunctions = metricFunctions;
         }
 
-        protected override IMemcachedNode CreateNode(EndPoint endpoint)
+        public override IMemcachedNode CreateNode(EndPoint endpoint)
         {
             return new BinaryNode(endpoint, this.configuration.SocketPool, this.authenticationProvider, _logger, _metricFunctions);
         }
