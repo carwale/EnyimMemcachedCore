@@ -110,22 +110,22 @@ namespace Enyim.Caching
 
         public async Task<bool> AddAsync(string key, object value)
         {
-            return await StoreAsync(StoreMode.Add, key, value);
+            return await StoreAsync(StoreMode.Add, key, value).ConfigureAwait(false);
         }
 
         public async Task<bool> AddAsync(string key, object value, int cacheSeconds)
         {
-            return await StoreAsync(StoreMode.Add, key, value, TimeSpan.FromSeconds(cacheSeconds));
+            return await StoreAsync(StoreMode.Add, key, value, TimeSpan.FromSeconds(cacheSeconds)).ConfigureAwait(false);
         }
 
         public async Task<bool> AddAsync(string key, object value, uint cacheSeconds)
         {
-            return await StoreAsync(StoreMode.Add, key, value, TimeSpan.FromSeconds(cacheSeconds));
+            return await StoreAsync(StoreMode.Add, key, value, TimeSpan.FromSeconds(cacheSeconds)).ConfigureAwait(false);
         }
 
         public async Task<bool> AddAsync(string key, object value, TimeSpan timeSpan)
         {
-            return await StoreAsync(StoreMode.Add, key, value, timeSpan);
+            return await StoreAsync(StoreMode.Add, key, value, timeSpan).ConfigureAwait(false);
         }
 
         public bool Set(string key, object value, int cacheSeconds)
@@ -145,17 +145,17 @@ namespace Enyim.Caching
 
         public async Task<bool> SetAsync(string key, object value, int cacheSeconds)
         {
-            return await StoreAsync(StoreMode.Set, key, value, TimeSpan.FromSeconds(cacheSeconds));
+            return await StoreAsync(StoreMode.Set, key, value, TimeSpan.FromSeconds(cacheSeconds)).ConfigureAwait(false);
         }
 
         public async Task<bool> SetAsync(string key, object value, uint cacheSeconds)
         {
-            return await StoreAsync(StoreMode.Set, key, value, TimeSpan.FromSeconds(cacheSeconds));
+            return await StoreAsync(StoreMode.Set, key, value, TimeSpan.FromSeconds(cacheSeconds)).ConfigureAwait(false);
         }
 
         public async Task<bool> SetAsync(string key, object value, TimeSpan timeSpan)
         {
-            return await StoreAsync(StoreMode.Set, key, value, timeSpan);
+            return await StoreAsync(StoreMode.Set, key, value, timeSpan).ConfigureAwait(false);
         }
 
         public bool Replace(string key, object value, int cacheSeconds)
@@ -175,17 +175,17 @@ namespace Enyim.Caching
 
         public async Task<bool> ReplaceAsync(string key, object value, int cacheSeconds)
         {
-            return await StoreAsync(StoreMode.Replace, key, value, TimeSpan.FromSeconds(cacheSeconds));
+            return await StoreAsync(StoreMode.Replace, key, value, TimeSpan.FromSeconds(cacheSeconds)).ConfigureAwait(false);
         }
 
         public async Task<bool> ReplaceAsync(string key, object value, uint cacheSeconds)
         {
-            return await StoreAsync(StoreMode.Replace, key, value, TimeSpan.FromSeconds(cacheSeconds));
+            return await StoreAsync(StoreMode.Replace, key, value, TimeSpan.FromSeconds(cacheSeconds)).ConfigureAwait(false);
         }
 
         public async Task<bool> ReplaceAsync(string key, object value, TimeSpan timeSpan)
         {
-            return await StoreAsync(StoreMode.Replace, key, value, timeSpan);
+            return await StoreAsync(StoreMode.Replace, key, value, timeSpan).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -346,7 +346,7 @@ namespace Enyim.Caching
 
             try
             {
-                var commandResult = await node.ExecuteAsync(command);
+                var commandResult = await node.ExecuteAsync(command).ConfigureAwait(false);
 #if NET6_0
                 activity.SetSuccess();
 #endif
@@ -386,7 +386,7 @@ namespace Enyim.Caching
 
             try
             {
-                var commandResult = await node.ExecuteAsync(command);
+                var commandResult = await node.ExecuteAsync(command).ConfigureAwait(false); ;
 #if NET6_0
                 activity.SetSuccess();
 #endif
@@ -405,18 +405,18 @@ namespace Enyim.Caching
 
         public async Task<T> GetValueAsync<T>(string key)
         {
-            var result = await GetAsync<T>(key);
+            var result = await GetAsync<T>(key).ConfigureAwait(false);
             return result.Success ? result.Value : default(T);
         }
 
         public async Task<T> GetValueOrCreateAsync<T>(string key, int cacheSeconds, Func<Task<T>> generator)
         {
-            var result = await GetAsync<T>(key);
+            var result = await GetAsync<T>(key).ConfigureAwait(false);
             if (result.Success)
             {
                 if (_logger.IsEnabled(LogLevel.Debug))
                 {
-                    _logger.LogDebug($"Cache is hint. Key is '{key}'.");
+                    _logger.LogDebug($"Cache is hit. Key is '{key}'.");
                 }
 
                 return result.Value;
@@ -427,12 +427,12 @@ namespace Enyim.Caching
                 _logger.LogDebug($"Cache is missed. Key is '{key}'.");
             }
 
-            var value = await generator?.Invoke();
+            var value = await (generator?.Invoke()).ConfigureAwait(false);
             if (value != null)
             {
                 try
                 {
-                    await AddAsync(key, value, cacheSeconds);
+                    await AddAsync(key, value, cacheSeconds).ConfigureAwait(false);
 
                     if (_logger.IsEnabled(LogLevel.Debug))
                     {
@@ -652,17 +652,17 @@ namespace Enyim.Caching
 
         public async Task<bool> StoreAsync(StoreMode mode, string key, object value)
         {
-            return (await PerformStoreAsync(mode, key, value, 0)).Success;
+            return (await PerformStoreAsync(mode, key, value, 0).ConfigureAwait(false)).Success;
         }
 
         public async Task<bool> StoreAsync(StoreMode mode, string key, object value, DateTime expiresAt)
         {
-            return (await PerformStoreAsync(mode, key, value, MemcachedClient.GetExpiration(null, expiresAt))).Success;
+            return (await PerformStoreAsync(mode, key, value, MemcachedClient.GetExpiration(null, expiresAt)).ConfigureAwait(false)).Success;
         }
 
         public async Task<bool> StoreAsync(StoreMode mode, string key, object value, TimeSpan validFor)
         {
-            return (await PerformStoreAsync(mode, key, value, MemcachedClient.GetExpiration(validFor, null))).Success;
+            return (await PerformStoreAsync(mode, key, value, MemcachedClient.GetExpiration(validFor, null)).ConfigureAwait(false)).Success;
         }
 
         /// <summary>
@@ -863,7 +863,7 @@ namespace Enyim.Caching
                 }
 
                 var command = _pool.OperationFactory.Store(mode, hashedKey, item, expires, cas);
-                var commandResult = await node.ExecuteAsync(command);
+                var commandResult = await node.ExecuteAsync(command).ConfigureAwait(false);
 
                 result.Cas = cas = command.CasValue;
                 result.StatusCode = statusCode = command.StatusCode;
@@ -1081,12 +1081,12 @@ namespace Enyim.Caching
         #region Touch
         public async Task<IOperationResult> TouchAsync(string key, DateTime expiresAt)
         {
-            return await PerformMutateAsync(MutationMode.Touch, key, 0, 0, GetExpiration(null, expiresAt));
+            return await PerformMutateAsync(MutationMode.Touch, key, 0, 0, GetExpiration(null, expiresAt)).ConfigureAwait(false);
         }
 
         public async Task<IOperationResult> TouchAsync(string key, TimeSpan validFor)
         {
-            return await PerformMutateAsync(MutationMode.Touch, key, 0, 0, GetExpiration(validFor, null));
+            return await PerformMutateAsync(MutationMode.Touch, key, 0, 0, GetExpiration(validFor, null)).ConfigureAwait(false);
         }
         #endregion
 
@@ -1175,7 +1175,7 @@ namespace Enyim.Caching
             if (node != null)
             {
                 var command = _pool.OperationFactory.Mutate(mode, hashedKey, defaultValue, delta, expires, cas);
-                var commandResult = await node.ExecuteAsync(command);
+                var commandResult = await node.ExecuteAsync(command).ConfigureAwait(false);
 
                 result.Cas = cas = command.CasValue;
                 result.StatusCode = command.StatusCode;
@@ -1350,7 +1350,7 @@ namespace Enyim.Caching
                 tasks.Add(node.ExecuteAsync(command));
             }
 
-            await Task.WhenAll(tasks);
+            await Task.WhenAll(tasks).ConfigureAwait(false); ;
 
 #if NET6_0
                 activity.SetSuccess();
@@ -1412,7 +1412,7 @@ namespace Enyim.Caching
 
         public async Task<bool> RemoveAsync(string key)
         {
-            return (await ExecuteRemoveAsync(key)).Success;
+            return (await ExecuteRemoveAsync(key).ConfigureAwait(false)).Success;
         }
 
         public async Task<bool> RemoveMultiAsync(params string[] keys)
@@ -1426,11 +1426,11 @@ namespace Enyim.Caching
                     tasks[i] = ExecuteRemoveAsync(keys[i]);
                 }
 
-                await Task.WhenAll(tasks);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
 
                 foreach (var task in tasks)
                 {
-                    if (!(await task).Success) return false;
+                    if (!(await task.ConfigureAwait(false)).Success) return false;
                 }
 
                 return true;
@@ -1460,7 +1460,7 @@ namespace Enyim.Caching
             {
                 var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
                 var decompressedCacheItem = new CacheItem(kvp.Value.Flags, decompressedBytes);
-                return _transcoder.Deserialize<T>(decompressedCacheItem);
+                return _transcoder.Deserialize<T>(decompressedCacheItem).ConfigureAwait(false); ;
             });
         }
 
@@ -1489,7 +1489,7 @@ namespace Enyim.Caching
                     Result = _transcoder.Deserialize(decompressedCacheItem),
                     Cas = mget.Cas[kvp.Key]
                 };
-            });
+            }).ConfigureAwait(false);
         }
         protected virtual IDictionary<string, T> PerformMultiGet<T>(IEnumerable<string> keys, Func<IMultiGetOperation, KeyValuePair<string, CacheItem>, T> collector)
         {
@@ -1595,7 +1595,7 @@ namespace Enyim.Caching
                 var mget = _pool.OperationFactory.MultiGet(nodeKeys);
                 var task = Task.Run(async () =>
                 {
-                    if ((await node.ExecuteAsync(mget)).Success)
+                    if ((await node.ExecuteAsync(mget).ConfigureAwait(false)).Success)
                     {
                         foreach (var kvp in mget.Result)
                         {
@@ -1609,7 +1609,7 @@ namespace Enyim.Caching
                 tasks.Add(task);
             }
 
-            await Task.WhenAll(tasks);
+            await Task.WhenAll(tasks).ConfigureAwait(false); ;
 #if NET6_0
                 activity.SetSuccess();
 #endif

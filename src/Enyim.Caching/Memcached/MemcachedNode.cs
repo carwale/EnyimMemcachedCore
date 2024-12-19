@@ -211,7 +211,7 @@ namespace Enyim.Caching.Memcached
             var result = new PooledSocketResult();
             if (!_isInitialized)
             {
-                if (!await poolInitSemaphore.WaitAsync(_initPoolTimeout))
+                if (!await poolInitSemaphore.WaitAsync(_initPoolTimeout).ConfigureAwait(false))
                 {
                     return result.Fail("Timeout to poolInitSemaphore.Wait", _logger) as PooledSocketResult;
                 }
@@ -221,7 +221,7 @@ namespace Enyim.Caching.Memcached
                     if (!_isInitialized)
                     {
                         var startTime = DateTime.Now;
-                        await _internalPoolImpl.InitPoolAsync();
+                        await _internalPoolImpl.InitPoolAsync().ConfigureAwait(false);
                         _isInitialized = true;
 
                         if (_logger.IsEnabled(LogLevel.Information))
@@ -239,7 +239,7 @@ namespace Enyim.Caching.Memcached
 
             try
             {
-                return await _internalPoolImpl.AcquireAsync();
+                return await _internalPoolImpl.AcquireAsync().ConfigureAwait(false);
             }
             catch (Exception e)
             {
@@ -401,7 +401,7 @@ namespace Enyim.Caching.Memcached
                         {
                             try
                             {
-                                _freeItems.AddFirst(await CreateSocketAsync());
+                                _freeItems.Push(await CreateSocketAsync().ConfigureAwait(false));
                             }
                             catch (Exception ex)
                             {
@@ -518,7 +518,7 @@ namespace Enyim.Caching.Memcached
 
             private async Task<PooledSocket> CreateSocketAsync()
             {
-                var ps = await _ownerNode.CreateSocketAsync();
+                var ps = await _ownerNode.CreateSocketAsync().ConfigureAwait(false);
                 ps.CleanupCallback = ReleaseSocket;
 
                 return ps;
@@ -686,7 +686,7 @@ namespace Enyim.Caching.Memcached
 
                 PooledSocket socket = null;
 
-                if (!await _semaphore.WaitAsync(_queueTimeout))
+                if (!await _semaphore.WaitAsync(_queueTimeout).ConfigureAwait(false))
                 {
                     message = "Pool is full, timeouting. " + _endPoint;
                     _logger.LogInformation(message);
@@ -729,9 +729,9 @@ namespace Enyim.Caching.Memcached
                     {
                         var resetTask = socket.ResetAsync();
 
-                        if (await Task.WhenAny(resetTask, Task.Delay(_receiveTimeout)) == resetTask)
+                        if (await Task.WhenAny(resetTask, Task.Delay(_receiveTimeout)).ConfigureAwait(false) == resetTask)
                         {
-                            await resetTask;
+                            await resetTask.ConfigureAwait(false);
                         }
                         else
                         {
@@ -776,7 +776,7 @@ namespace Enyim.Caching.Memcached
                 {
                     // okay, create the new item
                     var startTime = DateTime.Now;
-                    socket = await CreateSocketAsync();
+                    socket = await CreateSocketAsync().ConfigureAwait(false);
 
                     if (_logger.IsEnabled(LogLevel.Information))
                     {
@@ -1042,13 +1042,13 @@ namespace Enyim.Caching.Memcached
         {
             try
             {
-                return await CreateSocketInternalAsync();
+                return await CreateSocketInternalAsync().ConfigureAwait(false);
             }
             catch
             {
                 try
                 {
-                    return await CreateSocketInternalAsync();
+                    return await CreateSocketInternalAsync().ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -1066,7 +1066,7 @@ namespace Enyim.Caching.Memcached
 #else
                 _useSslStream, _useIPv6);
 #endif
-            await ps.ConnectAsync();
+            await ps.ConnectAsync().ConfigureAwait(false);
             return ps;
         }
 
@@ -1133,7 +1133,7 @@ namespace Enyim.Caching.Memcached
                 _logger.LogDebug($"ExecuteOperationAsync({op})");
             }
 
-            var result = await AcquireAsync();
+            var result = await AcquireAsync().ConfigureAwait(false);
             if (result.Success && result.HasValue)
             {
                 try
@@ -1149,13 +1149,13 @@ namespace Enyim.Caching.Memcached
                     }
 
                     var writeSocketTask = pooledSocket.WriteAsync(b);
-                    if (await Task.WhenAny(writeSocketTask, Task.Delay(_config.ConnectionTimeout)) != writeSocketTask)
+                    if (await Task.WhenAny(writeSocketTask, Task.Delay(_config.ConnectionTimeout)).ConfigureAwait(false) != writeSocketTask)
                     {
                         result.Fail("Timeout to pooledSocket.WriteAsync");
                         return result;
                     }
 
-                    await writeSocketTask;
+                    await writeSocketTask.ConfigureAwait(false);
 
                     //if Get, call BinaryResponse
                     if (_logger.IsEnabled(LogLevel.Debug))
@@ -1164,13 +1164,13 @@ namespace Enyim.Caching.Memcached
                     }
 
                     var readResponseTask = op.ReadResponseAsync(pooledSocket);
-                    if (await Task.WhenAny(readResponseTask, Task.Delay(_config.ConnectionTimeout)) != readResponseTask)
+                    if (await Task.WhenAny(readResponseTask, Task.Delay(_config.ConnectionTimeout)).ConfigureAwait(false) != readResponseTask)
                     {
                         result.Fail($"Timeout to ReadResponseAsync(pooledSocket) for {op}");
                         return result;
                     }
 
-                    var readResult = await readResponseTask;
+                    var readResult = await readResponseTask.ConfigureAwait(false);
                     if (readResult.Success)
                     {
                         result.Pass();
@@ -1218,7 +1218,7 @@ namespace Enyim.Caching.Memcached
 
         protected virtual async Task<bool> ExecuteOperationAsync(IOperation op, Action<bool> next)
         {
-            var socket = (await AcquireAsync()).Value;
+            var socket = (await AcquireAsync().ConfigureAwait(false)).Value;
             if (socket == null) return false;
 
             //key(string) to buffer(btye[])
@@ -1226,14 +1226,14 @@ namespace Enyim.Caching.Memcached
 
             try
             {
-                await socket.WriteAsync(b);
+                await socket.WriteAsync(b).ConfigureAwait(false);
 
                 var rrs = await op.ReadResponseAsync(socket, readSuccess =>
                 {
                     ((IDisposable)socket).Dispose();
 
                     next(readSuccess);
-                });
+                }).ConfigureAwait(false);
 
                 return rrs;
             }
@@ -1279,12 +1279,12 @@ namespace Enyim.Caching.Memcached
 
         async Task<IOperationResult> IMemcachedNode.ExecuteAsync(IOperation op)
         {
-            return await ExecuteOperationAsync(op);
+            return await ExecuteOperationAsync(op).ConfigureAwait(false);
         }
 
         async Task<bool> IMemcachedNode.ExecuteAsync(IOperation op, Action<bool> next)
         {
-            return await ExecuteOperationAsync(op, next);
+            return await ExecuteOperationAsync(op, next).ConfigureAwait(false);
         }
 
         event Action<IMemcachedNode> IMemcachedNode.Failed
