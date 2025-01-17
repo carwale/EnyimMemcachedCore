@@ -18,34 +18,34 @@ namespace Enyim.Caching.Configuration
         private TimeSpan _initPoolTimeout = new TimeSpan(0, 1, 0);
         private INodeFailurePolicyFactory FailurePolicyFactory = new ThrottlingFailurePolicyFactory(5, TimeSpan.FromMilliseconds(2000));
 
-        int ISocketPoolConfiguration.MinPoolSize
-        {
-            get { return this.minPoolSize; }
-            set { this.minPoolSize = value; }
-        }
+		int ISocketPoolConfiguration.MinPoolSize
+		{
+			get { return this.minPoolSize; }
+			set { this.minPoolSize = value; }
+		}
 
-        /// <summary>
-        /// Gets or sets a value indicating the maximum amount of sockets per server in the socket pool.
-        /// </summary>
-        /// <returns>The maximum amount of sockets per server in the socket pool. The default is 20.</returns>
-        /// <remarks>It should be 0.75 * (number of threads) for optimal performance.</remarks>
-        int ISocketPoolConfiguration.MaxPoolSize
-        {
-            get { return this.maxPoolSize; }
-            set { this.maxPoolSize = value; }
-        }
+		/// <summary>
+		/// Gets or sets a value indicating the maximum amount of sockets per server in the socket pool.
+		/// </summary>
+		/// <returns>The maximum amount of sockets per server in the socket pool. The default is 20.</returns>
+		/// <remarks>It should be 0.75 * (number of threads) for optimal performance.</remarks>
+		int ISocketPoolConfiguration.MaxPoolSize
+		{
+			get { return this.maxPoolSize; }
+			set { this.maxPoolSize = value; }
+		}
 
-        TimeSpan ISocketPoolConfiguration.ConnectionTimeout
-        {
-            get { return this.connectionTimeout; }
-            set
-            {
-                if (value < TimeSpan.Zero)
-                    throw new ArgumentOutOfRangeException("value", "value must be positive");
+		TimeSpan ISocketPoolConfiguration.ConnectionTimeout
+		{
+			get { return this.connectionTimeout; }
+			set
+			{
+				if (value < TimeSpan.Zero)
+					throw new ArgumentOutOfRangeException("value", "value must be positive");
 
-                this.connectionTimeout = value;
-            }
-        }
+				this.connectionTimeout = value;
+			}
+		}
 
         TimeSpan ISocketPoolConfiguration.ConnectionIdleTimeout
         {
@@ -66,58 +66,46 @@ namespace Enyim.Caching.Configuration
                 if (value < TimeSpan.Zero)
                     throw new ArgumentOutOfRangeException("value", "value must be positive");
 
-                this.receiveTimeout = value;
-            }
-        }
+				this.receiveTimeout = value;
+			}
+		}
 
-        TimeSpan ISocketPoolConfiguration.QueueTimeout
-        {
-            get { return this.queueTimeout; }
-            set
-            {
-                if (value < TimeSpan.Zero)
-                    throw new ArgumentOutOfRangeException("value", "value must be positive");
+		TimeSpan ISocketPoolConfiguration.QueueTimeout
+		{
+			get { return this.queueTimeout; }
+			set
+			{
+				if (value < TimeSpan.Zero)
+					throw new ArgumentOutOfRangeException("value", "value must be positive");
 
-                this.queueTimeout = value;
-            }
-        }
+				this.queueTimeout = value;
+			}
+		}
 
-        TimeSpan ISocketPoolConfiguration.InitPoolTimeout
-        {
-            get { return _initPoolTimeout; }
-            set
-            {
-                if (value < TimeSpan.Zero)
-                    throw new ArgumentOutOfRangeException("value", "value must be positive");
+		TimeSpan ISocketPoolConfiguration.DeadTimeout
+		{
+			get { return this.deadTimeout; }
+			set
+			{
+				if (value < TimeSpan.Zero)
+					throw new ArgumentOutOfRangeException("value", "value must be positive");
 
-                _initPoolTimeout = value;
-            }
-        }
+				this.deadTimeout = value;
+			}
+		}
 
-        TimeSpan ISocketPoolConfiguration.DeadTimeout
-        {
-            get { return this.deadTimeout; }
-            set
-            {
-                if (value < TimeSpan.Zero)
-                    throw new ArgumentOutOfRangeException("value", "value must be positive");
+		INodeFailurePolicyFactory ISocketPoolConfiguration.FailurePolicyFactory
+		{
+			get { return this.policyFactory; }
+			set
+			{
+				if (value == null)
+					throw new ArgumentNullException("value");
 
-                this.deadTimeout = value;
-            }
-        }
-
-        INodeFailurePolicyFactory ISocketPoolConfiguration.FailurePolicyFactory
-        {
-            get { return this.FailurePolicyFactory; }
-            set
-            {
-                if (value == null)
-                    throw new ArgumentNullException("value");
-
-                this.FailurePolicyFactory = value;
-            }
-        }
-    }
+				this.policyFactory = value;
+			}
+		}
+	}
 }
 
 #region [ License information          ]

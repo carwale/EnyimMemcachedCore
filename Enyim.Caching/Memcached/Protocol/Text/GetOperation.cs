@@ -1,20 +1,44 @@
-using System.Threading.Tasks;
 using Enyim.Caching.Memcached.Results;
 using Enyim.Caching.Memcached.Results.Extensions;
 
 namespace Enyim.Caching.Memcached.Protocol.Text
 {
-    public class GetOperation : SingleItemOperation, IGetOperation
-    {
-        private CacheItem result;
+	public class GetOperation : SingleItemOperation, IGetOperation
+	{
+		private CacheItem result;
 
-        internal GetOperation(string key) : base(key) { }
+		internal GetOperation(string key) : base(key) { }
 
-        protected internal override System.Collections.Generic.IList<System.ArraySegment<byte>> GetBuffer()
+		protected internal override System.Collections.Generic.IList<System.ArraySegment<byte>> GetBuffer()
+		{
+			var command = "gets " + this.Key + TextSocketHelper.CommandTerminator;
+
+			return TextSocketHelper.GetCommandBuffer(command);
+		}
+
+		protected internal override IOperationResult ReadResponse(PooledSocket socket)
+		{
+			GetResponse r = GetHelper.ReadItem(socket);
+			var result = new TextOperationResult();
+
+			if (r == null) return result.Fail("Failed to read response");
+
+			this.result = r.Item;
+			this.Cas = r.CasValue;
+
+			GetHelper.FinishCurrent(socket);
+
+			return result.Pass();
+		}
+
+		CacheItem IGetOperation.Result
+		{
+			get { return this.result; }
+		}
+
+        protected internal override System.Threading.Tasks.Task<IOperationResult> ReadResponseAsync(PooledSocket socket)
         {
-            var command = "gets " + this.Key + TextSocketHelper.CommandTerminator;
-
-            return TextSocketHelper.GetCommandBuffer(command);
+            throw new System.NotImplementedException();
         }
 
         protected internal override IOperationResult ReadResponse(PooledSocket socket)
