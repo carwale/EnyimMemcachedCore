@@ -97,11 +97,11 @@ namespace Enyim.Caching.Memcached
                     LastConnectionTimestamp = DateTime.UtcNow;
                     success = true;
                 }
-                else
-                {
-                    _socket.Dispose();
-                    _socket = null;
-                }
+            }
+            else
+            {
+                _socket.Dispose();
+                _socket = null;
             }
 
             /*

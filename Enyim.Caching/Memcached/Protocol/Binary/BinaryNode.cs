@@ -17,24 +17,22 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
 	/// </summary>
 	public class BinaryNode : MemcachedNode
 	{
-        private readonly ILogger _logger;
-        private readonly IMetricFunctions _metricFunctions;
-        readonly ISaslAuthenticationProvider authenticationProvider;
-
-		ISaslAuthenticationProvider authenticationProvider;
+		private readonly ILogger _logger;
+		private readonly IMetricFunctions _metricFunctions;
+		readonly ISaslAuthenticationProvider authenticationProvider;
 
 		public BinaryNode(
-            EndPoint endpoint, 
-            ISocketPoolConfiguration config, 
-            ISaslAuthenticationProvider authenticationProvider,
-            ILogger logger, IMetricFunctions metricFunctions)
-            : base(endpoint, config, logger, metricFunctions)
-        {
-            this.authenticationProvider = authenticationProvider;
-            _logger = logger;
-            _metricFunctions = metricFunctions;
+			EndPoint endpoint,
+			ISocketPoolConfiguration config,
+			ISaslAuthenticationProvider authenticationProvider,
+			ILogger logger, IMetricFunctions metricFunctions)
+			: base(endpoint, config, logger, metricFunctions)
+		{
+			this.authenticationProvider = authenticationProvider;
+			_logger = logger;
+			_metricFunctions = metricFunctions;
 
-        }
+		}
 
 		/// <summary>
 		/// Authenticates the new socket before it is put into the pool.
@@ -74,7 +72,7 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
 				}
 				else
 				{
-				    _logger.LogWarning("Authentication failed, return code: 0x{0:x}", currentStep.StatusCode);
+					_logger.LogWarning("Authentication failed, return code: 0x{0:x}", currentStep.StatusCode);
 
 					// invalid credentials or other error
 					return false;

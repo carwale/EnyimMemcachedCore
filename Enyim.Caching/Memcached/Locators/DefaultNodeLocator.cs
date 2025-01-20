@@ -111,6 +111,7 @@ namespace Enyim.Caching.Memcached
 			{
 				_serverAccessLock.ExitWriteLock();
 			}
+		}
 			/// <summary>
 			/// locates a node by its key
 			/// </summary>
@@ -142,11 +143,6 @@ namespace Enyim.Caching.Memcached
 
 			return _servers[_keys[foundIndex]];
 		}
-
-		private static uint[] GenerateKeys(IMemcachedNode node, int numberOfKeys)
-		{
-			const int KeyLength = 4;
-			const int PartCount = 1; // (ModifiedFNV.HashSize / 8) / KeyLength; // HashSize is in bits, uint is 4 byte long
 
 		private static ulong[] GenerateKeys(IMemcachedNode node, int numberOfKeys)
 		{
