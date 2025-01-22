@@ -35,6 +35,7 @@ namespace Enyim.Caching.Memcached.Protocol.Text
         CacheItem IGetOperation.Result
         {
             get { return _result; }
+            set { _result = value; }
         }
 
         protected internal override ValueTask<IOperationResult> ReadResponseAsync(PooledSocket socket)

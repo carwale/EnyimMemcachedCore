@@ -14,9 +14,9 @@ namespace Enyim.Caching.Memcached
         private readonly int _serverAddressMutations;
 
         // holds all server keys for mapping an item key to the server consistently
-        private uint[] _keys;
+        private ulong[] _keys;
         // used to lookup a server based on its key
-        private Dictionary<uint, IMemcachedNode> _servers;
+        private Dictionary<ulong, IMemcachedNode> _servers;
         private Dictionary<IMemcachedNode, bool> _deadServers;
         private List<IMemcachedNode> _allServers;
         private ReaderWriterLockSlim _serverAccessLock;
@@ -27,7 +27,7 @@ namespace Enyim.Caching.Memcached
 
         public LegacyNodeLocator(int serverAddressMutations)
         {
-            _servers = new Dictionary<uint, IMemcachedNode>(new UIntEqualityComparer());
+            _servers = new Dictionary<ulong, IMemcachedNode>(new ULongEqualityComparer());
             _deadServers = new Dictionary<IMemcachedNode, bool>();
             _allServers = new List<IMemcachedNode>();
             _serverAccessLock = new ReaderWriterLockSlim();
@@ -36,7 +36,7 @@ namespace Enyim.Caching.Memcached
 
         private void BuildIndex(List<IMemcachedNode> nodes)
         {
-            var keys = new uint[nodes.Count * _serverAddressMutations];
+            var keys = new ulong[nodes.Count * _serverAddressMutations];
 
             int nodeIdx = 0;
 
@@ -53,7 +53,7 @@ namespace Enyim.Caching.Memcached
                 nodeIdx += _serverAddressMutations;
             }
 
-            Array.Sort<uint>(keys);
+            Array.Sort<ulong>(keys);
             Interlocked.Exchange(ref _keys, keys);
         }
 
@@ -126,9 +126,9 @@ namespace Enyim.Caching.Memcached
         {
             if (_keys.Length == 0) return null;
 
-            uint itemKeyHash = BitConverter.ToUInt32(new FNV1a(false).ComputeHash(Encoding.UTF8.GetBytes(key)), 0);
+            ulong itemKeyHash = BitConverter.ToUInt32(new FNV1a(false).ComputeHash(Encoding.UTF8.GetBytes(key)), 0);
             // get the index of the server assigned to this hash
-            int foundIndex = Array.BinarySearch<uint>(_keys, itemKeyHash);
+            int foundIndex = Array.BinarySearch<ulong>(_keys, itemKeyHash);
 
             // no exact match
             if (foundIndex < 0)
@@ -154,12 +154,12 @@ namespace Enyim.Caching.Memcached
             return _servers[_keys[foundIndex]];
         }
 
-        private static uint[] GenerateKeys(IMemcachedNode node, int numberOfKeys)
+        private static ulong[] GenerateKeys(IMemcachedNode node, int numberOfKeys)
         {
             const int KeyLength = 4;
             const int PartCount = 1; // (ModifiedFNV.HashSize / 8) / KeyLength; // HashSize is in bits, uint is 4 byte long
 
-            var k = new uint[PartCount * numberOfKeys];
+            var k = new ulong[PartCount * numberOfKeys];
 
             // every server is registered numberOfKeys times
             // using UInt32s generated from the different parts of the hash

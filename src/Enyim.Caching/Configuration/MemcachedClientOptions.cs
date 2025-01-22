@@ -26,8 +26,6 @@ namespace Enyim.Caching.Configuration
 
         public bool UseIPv6 { get; set; }
 
-        public bool SuppressException { get; set; } = true;
-
 #if NET5_0_OR_GREATER
         public SslClientAuthenticationOptions SslClientAuth { get; set; }
 #endif
@@ -80,7 +78,6 @@ namespace Enyim.Caching.Configuration
         public TimeSpan ReceiveTimeout { get; set; } = new TimeSpan(0, 0, 10);
         public TimeSpan DeadTimeout { get; set; } = new TimeSpan(0, 0, 10);
         public TimeSpan QueueTimeout { get; set; } = new TimeSpan(0, 0, 0, 0, 100);
-        public TimeSpan ConnectionIdleTimeout { get; set; } = TimeSpan.Zero;
         public TimeSpan InitPoolTimeout { get; set; } = new TimeSpan(0, 1, 0);
 
         public INodeFailurePolicyFactory FailurePolicyFactory { get; set; } =

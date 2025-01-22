@@ -47,8 +47,6 @@ namespace Enyim.Caching.Configuration
 
         bool UseIPv6 { get; }
 
-        bool SuppressException { get; }
-
 #if NET5_0_OR_GREATER
         SslClientAuthenticationOptions SslClientAuth { get; }
 #endif

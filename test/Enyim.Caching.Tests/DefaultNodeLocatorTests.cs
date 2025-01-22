@@ -19,7 +19,7 @@ namespace Enyim.Caching.Tests
 
             // FNV1a test vectors:
             // http://www.isthe.com/chongo/src/fnv/test_fnv.c
-            var testVectors = new List<Tuple<string, uint>>
+            var testVectors = new List<Tuple<string, ulong>>
             {
                 new("", 0x811c9dc5U),
                 new("a", 0xe40c292cU),
@@ -36,7 +36,7 @@ namespace Enyim.Caching.Tests
             foreach (var testVector in testVectors)
             {
                 byte[] data = fnv.ComputeHash(Encoding.ASCII.GetBytes(testVector.Item1));
-                uint value = BitConverter.ToUInt32(data, 0);
+                ulong value = BitConverter.ToUInt32(data, 0);
                 Assert.Equal(value, testVector.Item2);
             }
         }
@@ -44,8 +44,8 @@ namespace Enyim.Caching.Tests
         [Fact]
         public void TestLocator()
         {
-            string[] servers =
-            [
+            string[] servers = new[]
+            {
                 "10.0.1.1:11211",
                 "10.0.1.2:11211",
                 "10.0.1.3:11211",
@@ -54,7 +54,7 @@ namespace Enyim.Caching.Tests
                 "10.0.1.6:11211",
                 "10.0.1.7:11211",
                 "10.0.1.8:11211",
-            ];
+        };
             int[] serverCount = new int[servers.Length];
 
             var nodes = servers.

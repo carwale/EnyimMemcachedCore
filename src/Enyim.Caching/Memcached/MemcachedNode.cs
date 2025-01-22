@@ -4,7 +4,6 @@ using Enyim.Caching.Memcached.Results;
 using Enyim.Caching.Memcached.Results.Extensions;
 using Microsoft.Extensions.Logging;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -26,7 +25,6 @@ namespace Enyim.Caching.Memcached
         private readonly IMetricFunctions _metricFunctions;
         private static readonly object SyncRoot = new Object();
         private bool _isDisposed;
-        private readonly IMetricFunctions _metricFunctions;
 
         private readonly EndPoint _endPoint;
         private readonly ISocketPoolConfiguration _config;
@@ -68,7 +66,7 @@ namespace Enyim.Caching.Memcached
 
             _logger = logger;
             _metricFunctions = metricFunctions;
-            _internalPoolImpl = new InternalPoolImpl(this, socketPoolConfig, _logger);
+            _internalPoolImpl = new InternalPoolImpl(this, socketPoolConfig, _logger, _metricFunctions);
             _useIPv6 = useIPv6;
             _metricFunctions = metricFunctions;
         }
@@ -315,7 +313,6 @@ namespace Enyim.Caching.Memcached
             private readonly EndPoint _endPoint;
             private readonly string _endPointStr;
             private readonly TimeSpan _queueTimeout;
-            private readonly string _endPointStr;
             private readonly TimeSpan _receiveTimeout;
             private readonly TimeSpan _connectionIdleTimeout;
             private SemaphoreSlim _semaphore;
@@ -353,7 +350,7 @@ namespace Enyim.Caching.Memcached
 
                 _semaphore = new SemaphoreSlim(_maxItems, _maxItems);
                 _cleanSemaphore = new(1);
-                _freeItems = new ConcurrentStack<PooledSocket>();
+                _freeItems = new LinkedList<PooledSocket>();
 
                 _logger = logger;
                 _metricFunctions = metricFunctions;
@@ -406,7 +403,7 @@ namespace Enyim.Caching.Memcached
                         {
                             try
                             {
-                                _freeItems.Push(await CreateSocketAsync().ConfigureAwait(false));
+                                _freeItems.AddFirst(await CreateSocketAsync().ConfigureAwait(false));
                             }
                             catch (Exception ex)
                             {
@@ -450,7 +447,7 @@ namespace Enyim.Caching.Memcached
                         {
                             using var source = new CancellationTokenSource(_connectionIdleTimeout);
                             await ReconcileAsync(source.Token).ConfigureAwait(false);
-                            _metricFunctions.Set("cache_connection_count", (ulong)(maxItems - _semaphore.CurrentCount + _freeItems.Count), _endPointStr);
+                            _metricFunctions.Set("cache_connection_count", (ulong)(_maxItems - _semaphore.CurrentCount + _freeItems.Count), _endPointStr);
                         }
                         catch (Exception e)
                         {
@@ -470,10 +467,10 @@ namespace Enyim.Caching.Memcached
                     var waitTimeout = TimeSpan.FromMilliseconds(10);
                     while (true)
                     {
-                       
-                            // Calculate if current connection count <= minimum pool size
-                        if (maxItems - _semaphore.CurrentCount + _freeItems.Count <= minItems)
-                                return;
+
+                        // Calculate if current connection count <= minimum pool size
+                        if (_maxItems - _semaphore.CurrentCount + _freeItems.Count <= _minItems)
+                            return;
 
                         if (!await _semaphore.WaitAsync(waitTimeout, cancellationToken).ConfigureAwait(false))
                             return;
@@ -498,7 +495,7 @@ namespace Enyim.Caching.Memcached
 
                             if (idleTime > _connectionIdleTimeout)
                             {
-                                _logger.LogInformation("{0} pool found session {1} to clean up", ownerNode, retval.InstanceId);
+                                _logger.LogInformation("{0} pool found session {1} to clean up", _ownerNode, retval.InstanceId);
                                 retval.Destroy();
                             }
                             else
@@ -595,9 +592,18 @@ namespace Enyim.Caching.Memcached
                 }
 
 
-                PooledSocket socket;
+                PooledSocket socket = null;
+                lock (_freeItems)
+                {
+                    if (_freeItems.Count > 0)
+                    {
+                        socket = _freeItems.First!.Value;
+                        _freeItems.RemoveFirst();
+
+                    }
+                }
                 // do we have free items?
-                if (TryPopPooledSocket(out socket))
+                if (socket != null)
                 {
                     #region [ get it from the pool         ]
 
@@ -605,7 +611,7 @@ namespace Enyim.Caching.Memcached
                     {
                         socket.Reset();
 
-                        message = "Socket was reset. " + retval.InstanceId;
+                        message = "Socket was reset. " + socket.InstanceId;
                         _logger.LogInformation(message);
                         if (_isDebugEnabled) _logger.LogDebug(message);
 
@@ -722,14 +728,14 @@ namespace Enyim.Caching.Memcached
                 {
                     if (_freeItems.Count > 0)
                     {
-                        retval = _freeItems.First!.Value;
+                        socket = _freeItems.First!.Value;
                         _freeItems.RemoveFirst();
 
                     }
                 }
 
                 // do we have free items?
-                if (TryPopPooledSocket(out socket))
+                if (socket != null)
                 {
                     #region [ get it from the pool         ]
 
@@ -909,40 +915,6 @@ namespace Enyim.Caching.Memcached
                 }
             }
 
-            private bool TryPopPooledSocket(out PooledSocket pooledSocket)
-            {
-                if (_freeItems.TryPop(out var socket))
-                {
-                    if (_connectionIdleTimeout > TimeSpan.Zero &&
-                        socket.LastUsed < DateTime.UtcNow.Subtract(_connectionIdleTimeout))
-                    {
-                        try
-                        {
-                            if (_logger.IsEnabled(LogLevel.Information))
-                            {
-                                _logger.LogInformation("Connection idle timeout {idleTimeout} reached.",
-                                    _connectionIdleTimeout);
-                            }
-
-                            socket.Destroy();
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, $"Failed to destroy {nameof(PooledSocket)}");
-                        }
-
-                        pooledSocket = null;
-                        return false;
-                    }
-
-                    pooledSocket = socket;
-                    return true;
-                }
-
-                pooledSocket = null;
-                return false;
-            }
-
             ~InternalPoolImpl()
             {
                 try
@@ -968,15 +940,17 @@ namespace Enyim.Caching.Memcached
                     _isAlive = false;
                     _isDisposed = true;
 
-                    while (_freeItems.TryPop(out var socket))
+                    lock (_freeItems)
                     {
-                        try
+                        while (_freeItems.Count > 0)
                         {
-                            socket.Destroy();
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, $"failed to destroy {nameof(PooledSocket)}");
+                            try
+                            {
+                                PooledSocket ps = _freeItems.First!.Value;
+                                _freeItems.RemoveFirst();
+                                ps.Destroy();
+                            }
+                            catch { }
                         }
                     }
 
@@ -1018,7 +992,7 @@ namespace Enyim.Caching.Memcached
         {
             try
             {
-                var ps = new PooledSocket(_endPoint, _config.ConnectionTimeout, _config.ReceiveTimeout, _logger);
+                var ps = new PooledSocket(_endPoint, _config.ConnectionTimeout, _config.ReceiveTimeout, _logger, _useSslStream, _useIPv6, _sslClientAuthOptions);
                 ps.Connect();
                 return ps;
             }
@@ -1052,7 +1026,7 @@ namespace Enyim.Caching.Memcached
         {
             try
             {
-                var ps = new PooledSocket(_endPoint, _config.ConnectionTimeout, _config.ReceiveTimeout, _logger);
+                var ps = new PooledSocket(_endPoint, _config.ConnectionTimeout, _config.ReceiveTimeout, _logger, _useSslStream, _useIPv6, _sslClientAuthOptions);
                 await ps.ConnectAsync();
                 return ps;
             }

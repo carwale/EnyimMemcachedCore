@@ -27,7 +27,7 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
             ISocketPoolConfiguration config,
             ISaslAuthenticationProvider authenticationProvider,
             ILogger logger,
-            IMetricFunctions metricFunctions
+            IMetricFunctions metricFunctions,
             bool useSslStream,
             bool useIPv6,
             SslClientAuthenticationOptions sslClientAuthOptions)

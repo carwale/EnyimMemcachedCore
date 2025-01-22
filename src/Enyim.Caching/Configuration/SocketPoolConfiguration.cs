@@ -12,7 +12,6 @@ namespace Enyim.Caching.Configuration
         private int _maxPoolSize = 100;
         private bool _useSslStream = false;
         private TimeSpan _connectionTimeout = new TimeSpan(0, 0, 10);
-        private TimeSpan _connectionIdleTimeout = new TimeSpan(0, 0, 0);
         private TimeSpan _receiveTimeout = new TimeSpan(0, 0, 10);
         private TimeSpan _deadTimeout = new TimeSpan(0, 0, 10);
         private TimeSpan _queueTimeout = new TimeSpan(0, 0, 0, 0, 100);
@@ -46,17 +45,6 @@ namespace Enyim.Caching.Configuration
                     throw new ArgumentOutOfRangeException("value", "value must be positive");
 
                 _connectionTimeout = value;
-            }
-        }
-
-        TimeSpan ISocketPoolConfiguration.ConnectionIdleTimeout
-        {
-            get { return this.connectionIdleTimeout; }
-            set
-            {
-                if (value < TimeSpan.Zero)
-                    throw new ArgumentOutOfRangeException("value", "value must be positive");
-                this.connectionIdleTimeout = value;
             }
         }
 

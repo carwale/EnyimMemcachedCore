@@ -54,8 +54,6 @@ namespace Enyim.Caching
             {
                 throw new ArgumentNullException(nameof(configuration));
             }
-
-            _suppressException = configuration.SuppressException;
             _keyTransformer = configuration.CreateKeyTransformer() ?? new DefaultKeyTransformer();
             _transcoder = configuration.CreateTranscoder() ?? new DefaultTranscoder();
 
@@ -445,7 +443,7 @@ namespace Enyim.Caching
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, $"{nameof(AddAsync)}(\"{key}\", ..., {cacheSeconds})");
-                    if (!_suppressException) throw;
+                    throw;
                 }
             }
             return value;
@@ -782,12 +780,7 @@ namespace Enyim.Caching
             {
                 CacheItem item;
 
-                try 
-                { 
-                    item = _transcoder.Serialize(value); 
-                    item.Data = ZSTDCompression.Compress(item.Data, _logger);
-                }
-                catch (Exception e)
+                try
                 {
                     item = _transcoder.Serialize(value);
                     item.Data = ZSTDCompression.Compress(item.Data, _logger);
@@ -795,8 +788,6 @@ namespace Enyim.Caching
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "PerformStore failed with '{key}' key", key);
-
-                    if (!_suppressException) throw;
 
                     result.Fail("PerformStore failed", ex);
                     return result;
@@ -811,14 +802,14 @@ namespace Enyim.Caching
                 if (commandResult.Success)
                 {
 #if NET6_0
-                activity.SetSuccess();
+                    activity.SetSuccess();
 #endif
                     result.Pass();
                     return result;
                 }
 
 #if NET6_0
-                    activity.SetException(result.Exception);
+                activity.SetException(result.Exception);
 #endif
                 commandResult.Combine(result);
                 return result;
@@ -857,9 +848,9 @@ namespace Enyim.Caching
             {
                 CacheItem item;
 
-                try 
-                { 
-                    item = _transcoder.Serialize(value); 
+                try
+                {
+                    item = _transcoder.Serialize(value);
                     item.Data = ZSTDCompression.Compress(item.Data, _logger);
                 }
                 catch (Exception e)
@@ -879,14 +870,14 @@ namespace Enyim.Caching
                 if (commandResult.Success)
                 {
 #if NET6_0
-                activity.SetSuccess();
+                    activity.SetSuccess();
 #endif
                     result.Pass();
                     return result;
                 }
 
 #if NET6_0
-                    activity.SetException(result.Exception);
+                activity.SetException(result.Exception);
 #endif
                 commandResult.Combine(result);
                 return result;
@@ -1140,7 +1131,7 @@ namespace Enyim.Caching
                 {
                     result.Value = command.Result;
 #if NET6_0
-                activity.SetSuccess();
+                    activity.SetSuccess();
 #endif
                     result.Pass();
                     return result;
@@ -1192,7 +1183,7 @@ namespace Enyim.Caching
                 {
                     result.Value = command.Result;
 #if NET6_0
-                activity.SetSuccess();
+                    activity.SetSuccess();
 #endif
                     result.Pass();
                     return result;
@@ -1299,7 +1290,7 @@ namespace Enyim.Caching
                     result.Cas = cas = command.CasValue;
                     result.StatusCode = command.StatusCode;
 #if NET6_0
-                activity.SetSuccess();
+                    activity.SetSuccess();
 #endif
                     result.Pass();
                 }
@@ -1340,7 +1331,7 @@ namespace Enyim.Caching
                 node.Execute(command);
             }
 #if NET6_0
-                activity.SetSuccess();
+            activity.SetSuccess();
 #endif
         }
 
@@ -1361,7 +1352,7 @@ namespace Enyim.Caching
             await Task.WhenAll(tasks).ConfigureAwait(false); ;
 
 #if NET6_0
-                activity.SetSuccess();
+            activity.SetSuccess();
 #endif
         }
 
@@ -1402,7 +1393,7 @@ namespace Enyim.Caching
             }
 
 #if NET6_0
-                activity.SetSuccess();
+            activity.SetSuccess();
 #endif
 
             return new ServerStats(results);
@@ -1468,7 +1459,7 @@ namespace Enyim.Caching
             {
                 var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
                 var decompressedCacheItem = new CacheItem(kvp.Value.Flags, decompressedBytes);
-                return _transcoder.Deserialize<T>(decompressedCacheItem).ConfigureAwait(false); ;
+                return _transcoder.Deserialize<T>(decompressedCacheItem);
             });
         }
 
@@ -1488,7 +1479,8 @@ namespace Enyim.Caching
 
         public async Task<IDictionary<string, CasResult<object>>> GetWithCasAsync(IEnumerable<string> keys)
         {
-            return await PerformMultiGetAsync(keys, (mget, kvp) => {
+            return await PerformMultiGetAsync(keys, (mget, kvp) =>
+            {
                 var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
                 var decompressedCacheItem = new CacheItem(kvp.Value.Flags, decompressedBytes);
                 return new CasResult<object>
@@ -1555,7 +1547,7 @@ namespace Enyim.Caching
                         activity.SetException(e);
 #endif
                         _logger.LogError(0, e, "PerformMultiGet");
-                        if (!_suppressException) throw;
+                        throw;
                     }
                 }));
             }
@@ -1567,7 +1559,7 @@ namespace Enyim.Caching
             }
 
 #if NET6_0
-                activity.SetSuccess();
+            activity.SetSuccess();
 #endif
 
             return retval;
@@ -1618,7 +1610,7 @@ namespace Enyim.Caching
 
             await Task.WhenAll(tasks).ConfigureAwait(false); ;
 #if NET6_0
-                activity.SetSuccess();
+            activity.SetSuccess();
 #endif
             return retval;
         }

@@ -63,6 +63,7 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
         CacheItem IGetOperation.Result
         {
             get { return _result; }
+            set { _result = value; }
         }
     }
 }

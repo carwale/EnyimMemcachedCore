@@ -15,8 +15,7 @@ namespace Enyim.Caching.Memcached
     public class DefaultTranscoder : ITranscoder
     {
         public const uint RawDataFlag = 0xfa52;
-        private static readonly ArraySegment<byte> NullArray = new([]);
-
+        private static readonly ArraySegment<byte> NullArray = new ArraySegment<byte>(new byte[0]);
         CacheItem ITranscoder.Serialize(object value)
         {
             return Serialize(value);
