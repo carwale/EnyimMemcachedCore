@@ -24,8 +24,10 @@ namespace Enyim.Caching.Memcached
         private bool isAlive;
         private Socket socket;
         private EndPoint endpoint;
+        private readonly int connectionTimeout;
 
         private Stream inputStream;
+        public DateTime LastConnectionTimestamp { get; set; }
         private AsyncSocketHelper helper;
 
         public PooledSocket(EndPoint endpoint, TimeSpan connectionTimeout, TimeSpan receiveTimeout, ILogger logger)
@@ -35,13 +37,12 @@ namespace Enyim.Caching.Memcached
             this.isAlive = true;
 
             var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            // TODO test if we're better off using nagle
-            //PHP: OPT_TCP_NODELAY
-            //socket.NoDelay = true;
+            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+            socket.NoDelay = true;
 
-            var timeout = connectionTimeout == TimeSpan.MaxValue
-                            ? Timeout.Infinite
-                            : (int)connectionTimeout.TotalMilliseconds;
+            this.connectionTimeout = connectionTimeout == TimeSpan.MaxValue
+                ? Timeout.Infinite
+                : (int)connectionTimeout.TotalMilliseconds;
 
             var rcv = receiveTimeout == TimeSpan.MaxValue
                 ? Timeout.Infinite
@@ -49,83 +50,86 @@ namespace Enyim.Caching.Memcached
 
             socket.ReceiveTimeout = rcv;
             socket.SendTimeout = rcv;
-            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-
-            ConnectWithTimeout(socket, endpoint, timeout);
 
             this.socket = socket;
             this.endpoint = endpoint;
-
-            this.inputStream = new BasicNetworkStream(socket);
         }
-
-        private void ConnectWithTimeout(Socket socket, EndPoint endpoint, int timeout)
-        {
-            //var task = socket.ConnectAsync(endpoint);
-            //if(!task.Wait(timeout))
-            //{
-            //    using (socket)
-            //    {
-            //        throw new TimeoutException("Could not connect to " + endpoint);
-            //    }
-            //}  
-
-            if (endpoint is DnsEndPoint && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                var dnsEndPoint = ((DnsEndPoint)endpoint);
-                var host = dnsEndPoint.Host;
-                var addresses = Dns.GetHostAddresses(dnsEndPoint.Host);
-                var address = addresses.FirstOrDefault(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
-                if (address == null)
-                {
-                    throw new ArgumentException(String.Format("Could not resolve host '{0}'.", host));
-                }
-                _logger.LogDebug($"Resolved '{host}' to '{address}'");
-                endpoint = new IPEndPoint(address, dnsEndPoint.Port);
-            }
-
-            var completed = new AutoResetEvent(false);
-            var args = new SocketAsyncEventArgs();
-            args.RemoteEndPoint = endpoint;
-            args.Completed += OnConnectCompleted;
-            args.UserToken = completed;
-            socket.ConnectAsync(args);
-            if (!completed.WaitOne(timeout) || !socket.Connected)
-            {
-                using (socket)
-                {
-                    LastConnectionTimestamp = DateTime.UtcNow;
-                    success = true;
-                }
-            }
-            else
-            {
-                _socket.Dispose();
-                _socket = null;
-            }
-
-            /*
-            var mre = new ManualResetEvent(false);
-            socket.Connect(endpoint, iar =>
-            {
-                try { using (iar.AsyncWaitHandle) socket.EndConnect(iar); }
-                catch { }
-
-                mre.Set();
-            }, null);
-
-            if (!mre.WaitOne(timeout) || !socket.Connected)
-                using (socket)
-                    throw new TimeoutException("Could not connect to " + endpoint);
-           */
-        }
-
         private void OnConnectCompleted(object sender, SocketAsyncEventArgs args)
         {
             EventWaitHandle handle = (EventWaitHandle)args.UserToken;
             handle.Set();
         }
+        public async Task ConnectAsync()
+        {
+            bool success = false;
 
+            try
+            {
+                var connTask = this.socket.ConnectAsync(this.endpoint);
+
+                if (await Task.WhenAny(connTask, Task.Delay(this.connectionTimeout)) == connTask)
+                {
+                    await connTask;
+                }
+                else
+                {
+                    if (this.socket != null)
+                    {
+                        this.socket.Dispose();
+                        this.socket = null;
+                    }
+                    throw new TimeoutException($"Timeout to connect to {this.endpoint}.");
+                }
+            }
+            catch (PlatformNotSupportedException)
+            {
+                var ep = GetIPEndPoint(this.endpoint);
+                await this.socket.ConnectAsync(ep.Address, ep.Port);
+            }
+
+            if (this.socket != null)
+            {
+                if (this.socket.Connected)
+                {
+                    success = true;
+                    LastConnectionTimestamp = DateTime.UtcNow;
+                }
+                else
+                {
+                    this.socket.Dispose();
+                    this.socket = null;
+                }
+            }
+
+            if (success)
+            {
+                this.inputStream = new NetworkStream(this.socket);
+            }
+            else
+            {
+                throw new TimeoutException($"Could not connect to {this.endpoint}.");
+            }
+        }
+        private IPEndPoint GetIPEndPoint(EndPoint endpoint)
+        {
+            if (endpoint is DnsEndPoint)
+            {
+                var dnsEndPoint = (DnsEndPoint)endpoint;
+                var address = Dns.GetHostAddresses(dnsEndPoint.Host).FirstOrDefault(ip =>
+                    ip.AddressFamily == AddressFamily.InterNetwork);
+                if (address == null)
+                    throw new ArgumentException(String.Format("Could not resolve host '{0}'.", endpoint));
+                return new IPEndPoint(address, dnsEndPoint.Port);
+            }
+            else if (endpoint is IPEndPoint)
+            {
+                return endpoint as IPEndPoint;
+            }
+            else
+            {
+                throw new Exception("Not supported EndPoint type");
+            }
+        }
         public Action<PooledSocket> CleanupCallback { get; set; }
 
         public int Available
@@ -158,6 +162,31 @@ namespace Enyim.Caching.Memcached
             if (_logger.IsEnabled(LogLevel.Debug))
                 _logger.LogDebug("Socket {0} was reset", this.InstanceId);
         }
+        public async Task ResetAsync()
+        {
+            // await _inputStream.FlushAsync();
+
+            int available = this.socket.Available;
+
+            if (available > 0)
+            {
+                if (_logger.IsEnabled(LogLevel.Warning))
+                {
+                    _logger.LogWarning(
+                        "Socket bound to {0} has {1} unread data! This is probably a bug in the code. InstanceID was {2}.",
+                        this.socket.RemoteEndPoint, available, InstanceId);
+                }
+
+                byte[] data = new byte[available];
+
+                await ReadAsync(data, 0, available);
+                _logger.LogWarning(Encoding.ASCII.GetString(data));
+            }
+
+            if (_logger.IsEnabled(LogLevel.Debug))
+                _logger.LogDebug("Socket {0} was reset", this.InstanceId);
+        }
+
 
         /// <summary>
         /// The ID of this instance. Used by the <see cref="T:MemcachedServer"/> to identify the instance in its inner lists.
@@ -167,6 +196,7 @@ namespace Enyim.Caching.Memcached
         public bool IsAlive
         {
             get { return this.isAlive; }
+            set { this.isAlive = value; }
         }
 
         /// <summary>
@@ -245,6 +275,38 @@ namespace Enyim.Caching.Memcached
                 this.isAlive = false;
 
                 throw;
+            }
+        }
+        public async Task ReadAsync(byte[] buffer, int offset, int count)
+        {
+            this.CheckDisposed();
+
+            int read = 0;
+            int shouldRead = count;
+
+            while (read < count)
+            {
+                try
+                {
+                    int currentRead = await this.inputStream.ReadAsync(buffer, offset, shouldRead);
+                    if (currentRead == count)
+                        break;
+                    if (currentRead < 1)
+                        throw new IOException("The socket seems to be disconnected");
+
+                    read += currentRead;
+                    offset += currentRead;
+                    shouldRead -= currentRead;
+                }
+                catch (Exception ex)
+                {
+                    if (ex is IOException || ex is SocketException)
+                    {
+                        this.isAlive = false;
+                    }
+
+                    throw;
+                }
             }
         }
 

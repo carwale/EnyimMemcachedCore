@@ -6,17 +6,17 @@ using Enyim.Caching.Memcached;
 
 namespace Enyim.Caching.Configuration
 {
-    public class SocketPoolConfiguration : ISocketPoolConfiguration
-    {
-        private int minPoolSize = 5;
-        private int maxPoolSize = 100;
-        private TimeSpan connectionTimeout = new TimeSpan(0, 0, 10);
-        private TimeSpan connectionIdleTimeout = new TimeSpan(0, 0, 0);
-        private TimeSpan receiveTimeout = new TimeSpan(0, 0, 10);
-        private TimeSpan deadTimeout = new TimeSpan(0, 0, 10);
-        private TimeSpan queueTimeout = new TimeSpan(0, 0, 0, 0, 100);
-        private TimeSpan _initPoolTimeout = new TimeSpan(0, 1, 0);
-        private INodeFailurePolicyFactory FailurePolicyFactory = new ThrottlingFailurePolicyFactory(5, TimeSpan.FromMilliseconds(2000));
+	public class SocketPoolConfiguration : ISocketPoolConfiguration
+	{
+		private int minPoolSize = 5;
+		private int maxPoolSize = 100;
+		private TimeSpan connectionTimeout = new TimeSpan(0, 0, 10);
+		private TimeSpan connectionIdleTimeout = new TimeSpan(0, 0, 0);
+		private TimeSpan receiveTimeout = new TimeSpan(0, 0, 10);
+		private TimeSpan deadTimeout = new TimeSpan(0, 0, 10);
+		private TimeSpan queueTimeout = new TimeSpan(0, 0, 0, 0, 100);
+		private TimeSpan _initPoolTimeout = new TimeSpan(0, 1, 0);
+		private INodeFailurePolicyFactory FailurePolicyFactory = new ThrottlingFailurePolicyFactory(5, TimeSpan.FromMilliseconds(2000));
 
 		int ISocketPoolConfiguration.MinPoolSize
 		{
@@ -47,24 +47,24 @@ namespace Enyim.Caching.Configuration
 			}
 		}
 
-        TimeSpan ISocketPoolConfiguration.ConnectionIdleTimeout
-        {
-            get { return this.connectionIdleTimeout; }
-            set
-            {
-                if (value < TimeSpan.Zero)
-                    throw new ArgumentOutOfRangeException("value", "value must be positive");
-                this.connectionIdleTimeout = value;
-            }
-        }
+		TimeSpan ISocketPoolConfiguration.ConnectionIdleTimeout
+		{
+			get { return this.connectionIdleTimeout; }
+			set
+			{
+				if (value < TimeSpan.Zero)
+					throw new ArgumentOutOfRangeException("value", "value must be positive");
+				this.connectionIdleTimeout = value;
+			}
+		}
 
-        TimeSpan ISocketPoolConfiguration.ReceiveTimeout
-        {
-            get { return this.receiveTimeout; }
-            set
-            {
-                if (value < TimeSpan.Zero)
-                    throw new ArgumentOutOfRangeException("value", "value must be positive");
+		TimeSpan ISocketPoolConfiguration.ReceiveTimeout
+		{
+			get { return this.receiveTimeout; }
+			set
+			{
+				if (value < TimeSpan.Zero)
+					throw new ArgumentOutOfRangeException("value", "value must be positive");
 
 				this.receiveTimeout = value;
 			}
@@ -96,13 +96,13 @@ namespace Enyim.Caching.Configuration
 
 		INodeFailurePolicyFactory ISocketPoolConfiguration.FailurePolicyFactory
 		{
-			get { return this.policyFactory; }
+			get { return this.FailurePolicyFactory; }
 			set
 			{
 				if (value == null)
 					throw new ArgumentNullException("value");
 
-				this.policyFactory = value;
+				this.FailurePolicyFactory = value;
 			}
 		}
 	}

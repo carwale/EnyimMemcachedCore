@@ -20,6 +20,7 @@ namespace Enyim.Caching.Memcached
 		private Dictionary<IMemcachedNode, bool> _deadServers;
 		private List<IMemcachedNode> _allServers;
 		private ReaderWriterLockSlim _serverAccessLock;
+		private readonly int _serverAddressMutations;
 
 		public DefaultNodeLocator() : this(1000)
 		{
@@ -37,14 +38,14 @@ namespace Enyim.Caching.Memcached
 		private void BuildIndex(List<IMemcachedNode> nodes)
 		{
 			var keys = new ulong[nodes.Count * _serverAddressMutations];
-
+			int nodeIdx = 0;
 			foreach (IMemcachedNode node in nodes)
 			{
 				var tmpKeys = DefaultNodeLocator.GenerateKeys(node, DefaultNodeLocator.ServerAddressMutations);
 
 				for (var i = 0; i < tmpKeys.Length; i++)
 				{
-					this.servers[tmpKeys[i]] = node;
+					_servers[tmpKeys[i]] = node;
 				}
 
 				tmpKeys.CopyTo(keys, nodeIdx);
@@ -111,12 +112,13 @@ namespace Enyim.Caching.Memcached
 			{
 				_serverAccessLock.ExitWriteLock();
 			}
+			return Locate(key);
 		}
-			/// <summary>
-			/// locates a node by its key
-			/// </summary>
-			/// <param name="key"></param>
-			/// <returns></returns>
+		/// <summary>
+		/// locates a node by its key
+		/// </summary>
+		/// <param name="key"></param>
+		/// <returns></returns>
 		private IMemcachedNode FindNode(string key)
 		{
 			// key = string.Concat(key, "_m");
@@ -130,15 +132,15 @@ namespace Enyim.Caching.Memcached
 			if (foundIndex == 0)
 			{
 				// it's smaller than everything, so use the last server (with the highest key)
-				foundIndex = this.keys.Length - 1;
+				foundIndex = _keys.Length - 1;
 			}
-			else if (foundIndex >= this.keys.Length)
+			else if (foundIndex >= _keys.Length)
 			{
 				// the key was larger than all server keys, so return the first server
 				foundIndex = 0;
 			}
 
-			if (foundIndex < 0 || foundIndex > this.keys.Length)
+			if (foundIndex < 0 || foundIndex > _keys.Length)
 				return null;
 
 			return _servers[_keys[foundIndex]];
@@ -176,26 +178,26 @@ namespace Enyim.Caching.Memcached
 
 		void IDisposable.Dispose()
 		{
-			using (this.serverAccessLock)
+			using (_serverAccessLock)
 			{
-				this.serverAccessLock.EnterWriteLock();
+				_serverAccessLock.EnterWriteLock();
 
 				try
 				{
 					// kill all pending operations (with an exception)
 					// it's not nice, but disposeing an instance while being used is bad practice
-					this.allServers = null;
-					this.servers = null;
-					this.keys = null;
-					this.deadServers = null;
+					_allServers = null;
+					_servers = null;
+					_keys = null;
+					_deadServers = null;
 				}
 				finally
 				{
-					this.serverAccessLock.ExitWriteLock();
+					_serverAccessLock.ExitWriteLock();
 				}
 			}
 
-			this.serverAccessLock = null;
+			_serverAccessLock = null;
 		}
 
 		#endregion
