@@ -1,6 +1,6 @@
-using System.Threading.Tasks;
 using Enyim.Caching.Memcached.Results;
 using Enyim.Caching.Memcached.Results.Extensions;
+using System.Threading.Tasks;
 
 namespace Enyim.Caching.Memcached.Protocol.Text
 {
@@ -38,22 +38,22 @@ namespace Enyim.Caching.Memcached.Protocol.Text
             set { this.result = value; }
         }
 
-        protected internal override ValueTask<IOperationResult> ReadResponseAsync(PooledSocket socket)
+        protected internal override Task<IOperationResult> ReadResponseAsync(PooledSocket socket)
         {
             GetResponse r = GetHelper.ReadItem(socket);
             var result = new TextOperationResult();
 
-            if (r == null) return new ValueTask<IOperationResult>(result.Fail("Failed to read response"));
+            if (r == null) return Task.FromResult<IOperationResult>(result.Fail("Failed to read response"));
 
             this.result = r.Item;
             this.Cas = r.CasValue;
 
             GetHelper.FinishCurrent(socket);
 
-            return new ValueTask<IOperationResult>(result.Pass());
+            return Task.FromResult<IOperationResult>(result.Pass());
         }
 
-        protected internal override Task<bool> ReadResponseAsync(PooledSocket socket, System.Action<bool> next)
+        protected internal override bool ReadResponseAsync(PooledSocket socket, System.Action<bool> next)
         {
             throw new System.NotSupportedException();
         }

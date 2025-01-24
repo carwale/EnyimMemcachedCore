@@ -1,18 +1,18 @@
-﻿using Enyim.Caching.Configuration;
+using System;
+using System.Linq;
+using Enyim.Caching.Configuration;
 using Enyim.Caching.Memcached;
+using System.Collections.Generic;
+using System.Threading;
+using System.Net;
+using System.Diagnostics;
 using Enyim.Caching.Memcached.Results;
-using Enyim.Caching.Memcached.Results.Extensions;
 using Enyim.Caching.Memcached.Results.Factories;
-using Microsoft.Extensions.Caching.Distributed;
+using Enyim.Caching.Memcached.Results.Extensions;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Net;
-using System.Threading;
-using System.Threading.Tasks;
+using Microsoft.Extensions.Caching.Distributed;
 
 #if NET6_0
 using Enyim.Caching.Tracing;
@@ -46,9 +46,11 @@ namespace Enyim.Caching
         protected IMemcachedKeyTransformer KeyTransformer { get { return this.keyTransformer; } }
         protected ITranscoder Transcoder { get { return this.transcoder; } }
 
-        public MemcachedClient(ILoggerFactory loggerFactory, IMemcachedClientConfiguration configuration)
+        public MemcachedClient(
+            ILoggerFactory loggerFactor,
+            IMemcachedClientConfiguration configuration)
         {
-            _logger = loggerFactory.CreateLogger<MemcachedClient>();
+            _logger = loggerFactor.CreateLogger<MemcachedClient>();
 
             if (configuration == null)
             {
@@ -90,34 +92,24 @@ namespace Enyim.Caching
 
         public event Action<IMemcachedNode> NodeFailed;
 
-        public bool Add(string key, object value, int cacheSeconds)
+        public void Add(string key, object value, int cacheSeconds)
         {
-            return Store(StoreMode.Add, key, value, TimeSpan.FromSeconds(cacheSeconds));
+            Store(StoreMode.Add, key, value, new TimeSpan(0, 0, cacheSeconds));
         }
 
-        public async Task<bool> AddAsync(string key, object value, int cacheSeconds)
+        public async Task AddAsync(string key, object value, int cacheSeconds)
         {
-            return await StoreAsync(StoreMode.Add, key, value, TimeSpan.FromSeconds(cacheSeconds));
+            await StoreAsync(StoreMode.Add, key, value, new TimeSpan(0, 0, cacheSeconds));
         }
 
-        public bool Set(string key, object value, int cacheSeconds)
+        public void Set(string key, object value, int cacheSeconds)
         {
-            return Store(StoreMode.Set, key, value, TimeSpan.FromSeconds(cacheSeconds));
+            Store(StoreMode.Set, key, value, new TimeSpan(0, 0, cacheSeconds));
         }
 
-        public async Task<bool> SetAsync(string key, object value, int cacheSeconds)
+        public async Task SetAsync(string key, object value, int cacheSeconds)
         {
-            return await StoreAsync(StoreMode.Set, key, value, TimeSpan.FromSeconds(cacheSeconds));
-        }
-
-        public bool Replace(string key, object value, int cacheSeconds)
-        {
-            return Store(StoreMode.Replace, key, value, TimeSpan.FromSeconds(cacheSeconds));
-        }
-
-        public async Task<bool> ReplaceAsync(string key, object value, int cacheSeconds)
-        {
-            return await StoreAsync(StoreMode.Replace, key, value, TimeSpan.FromSeconds(cacheSeconds));
+            await StoreAsync(StoreMode.Set, key, value, new TimeSpan(0, 0, cacheSeconds));
         }
 
         /// <summary>
@@ -125,6 +117,7 @@ namespace Enyim.Caching
         /// </summary>
         /// <param name="key">The identifier for the item to retrieve.</param>
         /// <returns>The retrieved item, or <value>null</value> if the key was not found.</returns>
+        [Obsolete]
         public object Get(string key)
         {
             object tmp;
@@ -137,48 +130,104 @@ namespace Enyim.Caching
         /// </summary>
         /// <param name="key">The identifier for the item to retrieve.</param>
         /// <returns>The retrieved item, or <value>default(T)</value> if the key was not found.</returns>
+        [Obsolete]
         public T Get<T>(string key)
         {
-            var result = PerformGet<T>(key);
+            var hashedKey = this.keyTransformer.Transform(key);
+            var node = this.pool.Locate(hashedKey);
+
+            if (node != null)
+            {
+                try
+                {
+                    var command = this.pool.OperationFactory.Get(hashedKey);
+                    var commandResult = node.Execute(command);
+
+                    if (commandResult.Success)
+                    {
+                        if (typeof(T).GetTypeCode() == TypeCode.Object && typeof(T) != typeof(Byte[]))
+                        {
+                            return this.transcoder.Deserialize<T>(command.Result);
+                        }
+                        else
+                        {
+                            var tempResult = this.transcoder.Deserialize(command.Result);
+                            if (tempResult != null)
+                            {
+                                if (typeof(T) == typeof(Guid))
+                                {
+                                    return (T)(object)new Guid((string)tempResult);
+                                }
+                                else
+                                {
+                                    return (T)tempResult;
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(0, ex, $"{nameof(GetAsync)}(\"{key}\")");
+                    throw ex;
+                }
+            }
+            else
+            {
+                _logger.LogError($"Unable to locate memcached node");
+            }
+
+            return default(T);
+        }
+
+        public async Task<T> GetValueAsync<T>(string key)
+        {
+            var result = await GetAsync<T>(key);
             return result.Success ? result.Value : default(T);
         }
 
-        public IGetOperationResult<T> PerformGet<T>(string key)
+        /// <summary>
+        /// Tries to get an item from the cache.
+        /// </summary>
+        /// <param name="key">The identifier for the item to retrieve.</param>
+        /// <param name="value">The retrieved item or null if not found.</param>
+        /// <returns>The <value>true</value> if the item was successfully retrieved.</returns>
+        [Obsolete]
+        public bool TryGet(string key, out object value)
         {
-            if (!CreateGetCommand<T>(key, out var result, out var node, out var command))
-            {
-                return result;
-            }
+            ulong cas = 0;
 
-            #if NET6_0
-            using var activity = ActivitySourceHelper.StartActivity("PerformTryGet", new[]
-            {
-                new KeyValuePair<string, object?>("net.peer.query.key", key),
-                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
-                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
-            });
-            # endif
-
-            try
-            {
-                var commandResult = node.Execute(command);
-                #if NET6_0
-                activity.SetSuccess();
-                # endif
-                return BuildGetCommandResult<T>(result, command, commandResult);
-
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(0, ex, $"{nameof(PerformGet)}(\"{key}\")");
-                #if NET6_0
-                activity.SetException(ex);
-                # endif
-                result.Fail(ex.Message);
-                return result;
-            }
+            return this.PerformTryGet(key, out cas, out value).Success;
         }
 
+        [Obsolete]
+        public CasResult<object> GetWithCas(string key)
+        {
+            return this.GetWithCas<object>(key);
+        }
+
+        [Obsolete]
+        public CasResult<T> GetWithCas<T>(string key)
+        {
+            CasResult<object> tmp;
+
+            return this.TryGetWithCas(key, out tmp)
+                    ? new CasResult<T> { Cas = tmp.Cas, Result = (T)tmp.Result }
+                    : new CasResult<T> { Cas = tmp.Cas, Result = default(T) };
+        }
+
+        [Obsolete]
+        public bool TryGetWithCas(string key, out CasResult<object> value)
+        {
+            object tmp;
+            ulong cas;
+
+            var retval = this.PerformTryGet(key, out cas, out tmp);
+
+            value = new CasResult<object> { Cas = cas, Result = tmp };
+
+            return retval.Success;
+        }
         private bool CreateGetCommand(string key, out IGetOperationResult result, out IMemcachedNode node, out IGetOperation command)
         {
             result = new DefaultGetOperationResultFactory().Create();
@@ -197,7 +246,6 @@ namespace Enyim.Caching
             command = this.pool.OperationFactory.Get(hashedKey);
             return true;
         }
-
         private bool CreateGetCommand<T>(string key, out IGetOperationResult<T> result, out IMemcachedNode node, out IGetOperation command)
         {
             result = new DefaultGetOperationResultFactory<T>().Create();
@@ -253,171 +301,40 @@ namespace Enyim.Caching
             return result;
         }
 
-
-        public async Task<IGetOperationResult> GetAsync(string key)
-        {
-            if (!CreateGetCommand(key, out var result, out var node, out var command))
-            {
-                _logger.LogInformation($"Failed to CreateGetCommand for '{key}' key");
-                return result;
-            }
-
-            #if NET6_0
-            using var activity = ActivitySourceHelper.StartActivity("GetAsync", new[]
-            {
-                new KeyValuePair<string, object?>("net.peer.query.key", key),
-                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
-                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
-            });
-            # endif
-
-            try
-            {
-                var commandResult = await node.ExecuteAsync(command);
-                #if NET6_0
-                activity.SetSuccess();
-                # endif
-                return BuildGetCommandResult(result, command, commandResult);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(0, ex, $"{nameof(GetAsync)}(\"{key}\")");
-                #if NET6_0
-                activity.SetException(ex);
-                # endif
-                result.Fail(ex.Message, ex);
-                return result;
-            }
-        }
-
-        public async Task<IGetOperationResult<T>> GetAsync<T>(string key)
+        public IGetOperationResult<T> PerformGet<T>(string key)
         {
             if (!CreateGetCommand<T>(key, out var result, out var node, out var command))
             {
-                _logger.LogInformation($"Failed to CreateGetCommand for '{key}' key");
                 return result;
             }
 
-            #if NET6_0
-            using var activity = ActivitySourceHelper.StartActivity("GetAsync", new[]
+#if NET6_0
+            using var activity = ActivitySourceHelper.StartActivity("PerformTryGet", new[]
             {
                 new KeyValuePair<string, object?>("net.peer.query.key", key),
                 new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
                 new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
             });
-            # endif
+#endif
 
             try
             {
-                var commandResult = await node.ExecuteAsync(command);
-                #if NET6_0
+                var commandResult = node.Execute(command);
+#if NET6_0
                 activity.SetSuccess();
-                # endif
+#endif
                 return BuildGetCommandResult<T>(result, command, commandResult);
+
             }
             catch (Exception ex)
             {
-                _logger.LogError(0, ex, $"{nameof(GetAsync)}(\"{key}\")");
-                #if NET6_0
+                _logger.LogError(0, ex, $"{nameof(PerformGet)}(\"{key}\")");
+#if NET6_0
                 activity.SetException(ex);
-                # endif
-                result.Fail(ex.Message, ex);
+#endif
+                result.Fail(ex.Message);
                 return result;
             }
-        }
-
-        public async Task<T> GetValueAsync<T>(string key)
-        {
-            var result = await GetAsync<T>(key);
-            return result.Success ? result.Value : default(T);
-        }
-
-        public async Task<T> GetValueOrCreateAsync<T>(string key, int cacheSeconds, Func<Task<T>> generator)
-        {
-            var result = await GetAsync<T>(key);
-            if (result.Success)
-            {
-                _logger.LogDebug($"Cache is hint. Key is '{key}'.");
-                return result.Value;
-            }
-
-            _logger.LogDebug($"Cache is missed. Key is '{key}'.");
-
-            var value = await generator?.Invoke();
-            if (value != null)
-            {
-                try
-                {
-                    await AddAsync(key, value, cacheSeconds);
-                    _logger.LogDebug($"Added value into cache. Key is '{key}'. " + value);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, $"{nameof(AddAsync)}(\"{key}\", ..., {cacheSeconds})");
-                }
-            }
-            return value;
-        }
-
-        /// <summary>
-        /// Tries to get an item from the cache.
-        /// </summary>
-        /// <param name="key">The identifier for the item to retrieve.</param>
-        /// <param name="value">The retrieved item or null if not found.</param>
-        /// <returns>The <value>true</value> if the item was successfully retrieved.</returns>
-        public bool TryGet(string key, out object value)
-        {
-            ulong cas = 0;
-
-            return this.PerformTryGet(key, out cas, out value).Success;
-        }
-
-        /// <summary>
-        /// Tries to get an item from the cache.
-        /// </summary>
-        /// <param name="key">The identifier for the item to retrieve.</param>
-        /// <param name="value">The retrieved item or null if not found.</param>
-        /// <returns>The <value>true</value> if the item was successfully retrieved.</returns>
-        public bool TryGet<T>(string key, out T value)
-        {
-            ulong cas = 0;
-
-            return this.PerformTryGet(key, out cas, out value).Success;
-        }
-
-        public CasResult<object> GetWithCas(string key)
-        {
-            return this.GetWithCas<object>(key);
-        }
-
-        public CasResult<T> GetWithCas<T>(string key)
-        {
-            CasResult<T> tmp;
-
-            return this.TryGetWithCas(key, out tmp)
-                    ? new CasResult<T> { Cas = tmp.Cas, Result = tmp.Result }
-                    : new CasResult<T> { Cas = tmp.Cas, Result = default };
-        }
-
-        public bool TryGetWithCas(string key, out CasResult<object> value)
-        {
-            object tmp;
-            ulong cas;
-
-            var retval = this.PerformTryGet(key, out cas, out tmp);
-
-            value = new CasResult<object> { Cas = cas, Result = tmp };
-
-            return retval.Success;
-        }
-
-        public bool TryGetWithCas<T>(string key, out CasResult<T> value)
-        {
-            var retVal = PerformTryGet(key, out var cas, out T tmp);
-
-            value = new CasResult<T> { Cas = cas, Result = tmp };
-
-            return retVal.Success;
         }
 
         protected virtual IGetOperationResult PerformTryGet(string key, out ulong cas, out object value)
@@ -426,14 +343,14 @@ namespace Enyim.Caching
             var node = this.pool.Locate(hashedKey);
             var result = GetOperationResultFactory.Create();
 
-            #if NET6_0
+#if NET6_0
             using var activity = ActivitySourceHelper.StartActivity("PerformTryGet", new[]
             {
                 new KeyValuePair<string, object?>("net.peer.query.key", key),
                 new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
                 new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
             });
-            # endif
+#endif
 
             _logger.LogInformation($"Inside PerformTryGet");
 
@@ -452,17 +369,17 @@ namespace Enyim.Caching
                     result.Value = value = this.transcoder.Deserialize(command.Result);
                     result.Cas = cas = command.CasValue;
 
-                    #if NET6_0
+#if NET6_0
                     activity.SetSuccess();
-                    # endif
+#endif
                     result.Pass();
                     return result;
                 }
                 else
                 {
-                    #if NET6_0
+#if NET6_0
                     activity.SetException(result.Exception);
-                    # endif
+#endif
                     commandResult.Combine(result);
                     return result;
                 }
@@ -470,11 +387,46 @@ namespace Enyim.Caching
 
             result.Value = value;
             result.Cas = cas;
-            #if NET6_0
+#if NET6_0
             activity.SetException(new Exception("Unable to locate node"));
-            # endif
+#endif
             result.Fail("Unable to locate node");
             return result;
+        }
+        public async Task<IGetOperationResult> GetAsync(string key)
+        {
+            if (!CreateGetCommand(key, out var result, out var node, out var command))
+            {
+                _logger.LogInformation($"Failed to CreateGetCommand for '{key}' key");
+                return result;
+            }
+
+#if NET6_0
+            using var activity = ActivitySourceHelper.StartActivity("GetAsync", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key),
+                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
+                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
+            });
+#endif
+
+            try
+            {
+                var commandResult = await node.ExecuteAsync(command);
+#if NET6_0
+                activity.SetSuccess();
+#endif
+                return BuildGetCommandResult(result, command, commandResult);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(0, ex, $"{nameof(GetAsync)}(\"{key}\")");
+#if NET6_0
+                activity.SetException(ex);
+#endif
+                result.Fail(ex.Message, ex);
+                return result;
+            }
         }
 
         protected virtual IGetOperationResult PerformTryGet<T>(string key, out ulong cas, out T value)
@@ -483,14 +435,14 @@ namespace Enyim.Caching
             var node = pool.Locate(hashedKey);
             var result = GetOperationResultFactory.Create();
 
-            #if NET6_0
+#if NET6_0
             using var activity = ActivitySourceHelper.StartActivity("PerformTryGet", new[]
             {
                 new KeyValuePair<string, object?>("net.peer.query.key", key),
                 new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
                 new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
             });
-            # endif
+#endif
 
             cas = 0;
             value = default;
@@ -507,16 +459,16 @@ namespace Enyim.Caching
                     result.Value = value = transcoder.Deserialize<T>(command.Result);
                     result.Cas = cas = command.CasValue;
 
-                    #if NET6_0
+#if NET6_0
                     activity.SetSuccess();
-                    # endif
+#endif
                     result.Pass();
                     return result;
                 }
 
-                #if NET6_0
+#if NET6_0
                 activity.SetException(result.Exception);
-                # endif
+#endif
                 commandResult.Combine(result);
                 return result;
             }
@@ -524,13 +476,12 @@ namespace Enyim.Caching
             result.Value = value;
             result.Cas = cas;
 
-            #if NET6_0
+#if NET6_0
             activity.SetException(new Exception("Unable to locate node"));
-            # endif
+#endif
             result.Fail("Unable to locate node");
             return result;
         }
-
 
         #region [ Store                        ]
 
@@ -673,14 +624,14 @@ namespace Enyim.Caching
             var result = StoreOperationResultFactory.Create();
 
 
-            #if NET6_0
+#if NET6_0
             using var activity = ActivitySourceHelper.StartActivity("PerformStore", new[]
             {
                 new KeyValuePair<string, object?>("net.peer.query.key", key),
                 new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
                 new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
             });
-            # endif
+#endif
 
             statusCode = -1;
 
@@ -690,9 +641,9 @@ namespace Enyim.Caching
             {
                 CacheItem item;
 
-                try 
-                { 
-                    item = this.transcoder.Serialize(value); 
+                try
+                {
+                    item = this.transcoder.Serialize(value);
                     item.Data = ZSTDCompression.Compress(item.Data, _logger);
                 }
                 catch (Exception e)
@@ -711,27 +662,63 @@ namespace Enyim.Caching
 
                 if (commandResult.Success)
                 {
-                    #if NET6_0
-                activity.SetSuccess();
-            # endif
+#if NET6_0
+                    activity.SetSuccess();
+#endif
                     result.Pass();
                     return result;
                 }
 
-                #if NET6_0
-                    activity.SetException(result.Exception);
-                    # endif
+#if NET6_0
+                activity.SetException(result.Exception);
+#endif
                 commandResult.Combine(result);
                 return result;
             }
 
             //if (this.performanceMonitor != null) this.performanceMonitor.Store(mode, 1, false);
 
-            #if NET6_0
+#if NET6_0
             activity.SetException(new Exception("Unable to locate node"));
-            # endif
+#endif
             result.Fail("Unable to locate node");
             return result;
+        }
+
+        public async Task<IGetOperationResult<T>> GetAsync<T>(string key)
+        {
+            if (!CreateGetCommand<T>(key, out var result, out var node, out var command))
+            {
+                _logger.LogInformation($"Failed to CreateGetCommand for '{key}' key");
+                return result;
+            }
+
+#if NET6_0
+            using var activity = ActivitySourceHelper.StartActivity("GetAsync", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key),
+                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
+                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
+            });
+#endif
+
+            try
+            {
+                var commandResult = await node.ExecuteAsync(command);
+#if NET6_0
+                activity.SetSuccess();
+#endif
+                return BuildGetCommandResult<T>(result, command, commandResult);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(0, ex, $"{nameof(GetAsync)}(\"{key}\")");
+#if NET6_0
+                activity.SetException(ex);
+#endif
+                result.Fail(ex.Message, ex);
+                return result;
+            }
         }
 
         protected async virtual Task<IStoreOperationResult> PerformStoreAsync(StoreMode mode, string key, object value, uint expires)
@@ -740,27 +727,27 @@ namespace Enyim.Caching
             var node = this.pool.Locate(hashedKey);
             var result = StoreOperationResultFactory.Create();
 
-            #if NET6_0
+#if NET6_0
             using var activity = ActivitySourceHelper.StartActivity("PerformStoreAsync", new[]
             {
                 new KeyValuePair<string, object?>("net.peer.query.key", key),
                 new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
                 new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
             });
-            # endif
+#endif
 
             int statusCode = -1;
             ulong cas = 0;
-            
+
             //Removed null check on value parameter, in order to allow storing null
 
             if (node != null)
             {
                 CacheItem item;
 
-                try 
-                { 
-                    item = this.transcoder.Serialize(value); 
+                try
+                {
+                    item = this.transcoder.Serialize(value);
                     item.Data = ZSTDCompression.Compress(item.Data, _logger);
                 }
                 catch (Exception e)
@@ -779,25 +766,25 @@ namespace Enyim.Caching
 
                 if (commandResult.Success)
                 {
-                    #if NET6_0
-                activity.SetSuccess();
-            # endif
+#if NET6_0
+                    activity.SetSuccess();
+#endif
                     result.Pass();
                     return result;
                 }
 
-                #if NET6_0
-                    activity.SetException(result.Exception);
-                    # endif
+#if NET6_0
+                activity.SetException(result.Exception);
+#endif
                 commandResult.Combine(result);
                 return result;
             }
 
             //if (this.performanceMonitor != null) this.performanceMonitor.Store(mode, 1, false);
 
-            #if NET6_0
+#if NET6_0
             activity.SetException(new Exception("Unable to locate node"));
-            # endif
+#endif
             result.Fail("Unable to locate memcached node");
             return result;
         }
@@ -987,18 +974,6 @@ namespace Enyim.Caching
 
         #endregion
 
-        #region Touch
-        public async Task<IOperationResult> TouchAsync(string key, DateTime expiresAt)
-        {
-            return await PerformMutateAsync(MutationMode.Touch, key, 0, 0, GetExpiration(null, expiresAt));
-        }
-
-        public async Task<IOperationResult> TouchAsync(string key, TimeSpan validFor)
-        {
-            return await PerformMutateAsync(MutationMode.Touch, key, 0, 0, GetExpiration(validFor, null));
-        }
-        #endregion
-
         private IMutateOperationResult PerformMutate(MutationMode mode, string key, ulong defaultValue, ulong delta, uint expires)
         {
             ulong tmp = 0;
@@ -1020,14 +995,14 @@ namespace Enyim.Caching
             var node = this.pool.Locate(hashedKey);
             var result = MutateOperationResultFactory.Create();
 
-            #if NET6_0
+#if NET6_0
             using var activity = ActivitySourceHelper.StartActivity("PerformMutate", new[]
             {
                 new KeyValuePair<string, object?>("net.peer.query.key", key),
                 new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
                 new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
             });
-            # endif
+#endif
 
             if (node != null)
             {
@@ -1040,31 +1015,30 @@ namespace Enyim.Caching
                 if (commandResult.Success)
                 {
                     result.Value = command.Result;
-                    #if NET6_0
-                activity.SetSuccess();
-            # endif
+#if NET6_0
+                    activity.SetSuccess();
+#endif
                     result.Pass();
                     return result;
                 }
                 else
                 {
-                    #if NET6_0
+#if NET6_0
                     activity.SetException(result.Exception);
-                    # endif
+#endif
                     result.InnerResult = commandResult;
                     result.Fail("Mutate operation failed, see InnerResult or StatusCode for more details");
                 }
 
             }
 
-            #if NET6_0
+#if NET6_0
             activity.SetException(new Exception("Unable to locate node"));
-            # endif
+#endif
             // TODO not sure about the return value when the command fails
             result.Fail("Unable to locate node");
             return result;
         }
-
         protected virtual async Task<IMutateOperationResult> PerformMutateAsync(MutationMode mode, string key, ulong defaultValue, ulong delta, uint expires)
         {
             ulong cas = 0;
@@ -1072,14 +1046,14 @@ namespace Enyim.Caching
             var node = this.pool.Locate(hashedKey);
             var result = MutateOperationResultFactory.Create();
 
-            #if NET6_0
+#if NET6_0
             using var activity = ActivitySourceHelper.StartActivity("PerformMutateAsync", new[]
             {
                 new KeyValuePair<string, object?>("net.peer.query.key", key),
                 new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
                 new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
             });
-            # endif
+#endif
 
             if (node != null)
             {
@@ -1092,26 +1066,26 @@ namespace Enyim.Caching
                 if (commandResult.Success)
                 {
                     result.Value = command.Result;
-                    #if NET6_0
-                activity.SetSuccess();
-            # endif
+#if NET6_0
+                    activity.SetSuccess();
+#endif
                     result.Pass();
                     return result;
                 }
                 else
                 {
-                    #if NET6_0
+#if NET6_0
                     activity.SetException(result.Exception);
-                    # endif
+#endif
                     result.InnerResult = commandResult;
                     result.Fail("Mutate operation failed, see InnerResult or StatusCode for more details");
                 }
 
             }
 
-            #if NET6_0
+#if NET6_0
             activity.SetException(new Exception("Unable to locate node"));
-            # endif
+#endif
             // TODO not sure about the return value when the command fails
             result.Fail("Unable to locate node");
             return result;
@@ -1181,14 +1155,14 @@ namespace Enyim.Caching
             var node = this.pool.Locate(hashedKey);
             var result = ConcatOperationResultFactory.Create();
 
-            #if NET6_0
+#if NET6_0
             using var activity = ActivitySourceHelper.StartActivity("PerformConcatenate", new[]
             {
                 new KeyValuePair<string, object?>("net.peer.query.key", key),
                 new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
                 new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
             });
-            # endif
+#endif
 
             if (node != null)
             {
@@ -1199,16 +1173,16 @@ namespace Enyim.Caching
                 {
                     result.Cas = cas = command.CasValue;
                     result.StatusCode = command.StatusCode;
-                    #if NET6_0
-                activity.SetSuccess();
-            # endif
+#if NET6_0
+                    activity.SetSuccess();
+#endif
                     result.Pass();
                 }
                 else
                 {
-                    #if NET6_0
+#if NET6_0
                     activity.SetException(result.Exception);
-                    # endif
+#endif
                     result.InnerResult = commandResult;
                     result.Fail("Concat operation failed, see InnerResult or StatusCode for details");
                 }
@@ -1216,9 +1190,9 @@ namespace Enyim.Caching
                 return result;
             }
 
-            #if NET6_0
+#if NET6_0
             activity.SetException(new Exception("Unable to locate node"));
-            # endif
+#endif
             result.Fail("Unable to locate node");
             return result;
         }
@@ -1230,26 +1204,26 @@ namespace Enyim.Caching
         /// </summary>
         public void FlushAll()
         {
-            #if NET6_0
+#if NET6_0
             using var activity = ActivitySourceHelper.StartActivity("FlushALL");
 
-            # endif
+#endif
             foreach (var node in this.pool.GetWorkingNodes())
             {
                 var command = this.pool.OperationFactory.Flush();
 
                 node.Execute(command);
             }
-            #if NET6_0
-                activity.SetSuccess();
-            # endif
+#if NET6_0
+            activity.SetSuccess();
+#endif
         }
 
         public async Task FlushAllAsync()
         {
-            #if NET6_0
+#if NET6_0
             using var activity = ActivitySourceHelper.StartActivity("FlushAllAsync");
-            # endif
+#endif
             var tasks = new List<Task>();
 
             foreach (var node in this.pool.GetWorkingNodes())
@@ -1261,9 +1235,9 @@ namespace Enyim.Caching
 
             await Task.WhenAll(tasks);
 
-            #if NET6_0
-                activity.SetSuccess();
-            # endif
+#if NET6_0
+            activity.SetSuccess();
+#endif
         }
 
         /// <summary>
@@ -1277,9 +1251,9 @@ namespace Enyim.Caching
 
         public ServerStats Stats(string type)
         {
-            #if NET6_0
+#if NET6_0
             using var activity = ActivitySourceHelper.StartActivity("Stats");
-            # endif
+#endif
             var results = new Dictionary<EndPoint, Dictionary<string, string>>();
             var tasks = new List<Task>();
 
@@ -1302,9 +1276,9 @@ namespace Enyim.Caching
                 Task.WaitAll(tasks.ToArray());
             }
 
-            #if NET6_0
-                activity.SetSuccess();
-            # endif
+#if NET6_0
+            activity.SetSuccess();
+#endif
 
             return new ServerStats(results);
         }
@@ -1319,33 +1293,10 @@ namespace Enyim.Caching
             return ExecuteRemove(key).Success;
         }
 
+        //TODO: Not Implement
         public async Task<bool> RemoveAsync(string key)
         {
             return (await ExecuteRemoveAsync(key)).Success;
-        }
-
-        public async Task<bool> RemoveMultiAsync(params string[] keys)
-        {
-            if (keys.Length > 0)
-            {
-                var tasks = new Task<IRemoveOperationResult>[keys.Length];
-
-                for (var i = 0; i < keys.Length; i++)
-                {
-                    tasks[i] = ExecuteRemoveAsync(keys[i]);
-                }
-
-                await Task.WhenAll(tasks);
-
-                foreach (var task in tasks)
-                {
-                    if (!(await task).Success) return false;
-                }
-
-                return true;
-            }
-
-            return false;
         }
 
         /// <summary>
@@ -1381,15 +1332,15 @@ namespace Enyim.Caching
                 var decompressedCacheItem = new CacheItem(kvp.Value.Flags, decompressedBytes);
                 return new CasResult<object>
                 {
-                    Result = this.transcoder.Deserialize(decompressedCacheItem),
+                    Result = this.transcoder.Deserialize(kvp.Value),
                     Cas = mget.Cas[kvp.Key]
                 };
             });
         }
-
         public async Task<IDictionary<string, CasResult<object>>> GetWithCasAsync(IEnumerable<string> keys)
         {
-            return await PerformMultiGetAsync(keys, (mget, kvp) => {
+            return await PerformMultiGetAsync(keys, (mget, kvp) =>
+            {
                 var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
                 var decompressedCacheItem = new CacheItem(kvp.Value.Flags, decompressedBytes);
                 return new CasResult<object>
@@ -1403,9 +1354,9 @@ namespace Enyim.Caching
         {
             // transform the keys and index them by hashed => original
             // the mget results will be mapped using this index
-            #if NET6_0
+#if NET6_0
             using var activity = ActivitySourceHelper.StartActivity("PerformMultiGet");
-            # endif
+#endif
             var hashed = new Dictionary<string, string>();
             foreach (var key in keys) hashed[this.keyTransformer.Transform(key)] = key;
 
@@ -1419,9 +1370,9 @@ namespace Enyim.Caching
             {
                 var node = slice.Key;
 
-                #if NET6_0
+#if NET6_0
                 activity.AddTagsForKeys(node, keys);
-                # endif
+#endif
 
                 var nodeKeys = slice.Value;
                 var mget = this.pool.OperationFactory.MultiGet(nodeKeys);
@@ -1452,9 +1403,9 @@ namespace Enyim.Caching
                     }
                     catch (Exception e)
                     {
-                        # if NET6_0
+#if NET6_0
                         activity.SetException(e);
-                        # endif
+#endif
                         _logger.LogError(0, e, "PerformMultiGet");
                     }
                 }));
@@ -1466,9 +1417,9 @@ namespace Enyim.Caching
                 Task.WaitAll(tasks.ToArray());
             }
 
-            #if NET6_0
-                activity.SetSuccess();
-                # endif
+#if NET6_0
+            activity.SetSuccess();
+#endif
 
             return retval;
         }
@@ -1477,9 +1428,9 @@ namespace Enyim.Caching
         {
             // transform the keys and index them by hashed => original
             // the mget results will be mapped using this index
-            #if NET6_0
+#if NET6_0
             using var activity = ActivitySourceHelper.StartActivity("PerformMultiGetAsync");
-            # endif
+#endif
             var hashed = new Dictionary<string, string>();
             foreach (var key in keys)
             {
@@ -1495,9 +1446,9 @@ namespace Enyim.Caching
             foreach (var slice in byServer)
             {
                 var node = slice.Key;
-                #if NET6_0
+#if NET6_0
                 activity.AddTagsForKeys(node, keys);
-                # endif
+#endif
                 var nodeKeys = slice.Value;
                 var mget = this.pool.OperationFactory.MultiGet(nodeKeys);
                 var task = Task.Run(async () =>
@@ -1517,9 +1468,9 @@ namespace Enyim.Caching
             }
 
             await Task.WhenAll(tasks);
-            #if NET6_0
-                activity.SetSuccess();
-                # endif
+#if NET6_0
+            activity.SetSuccess();
+#endif
             return retval;
         }
 
@@ -1598,11 +1549,6 @@ namespace Enyim.Caching
             {
                 // infinity
                 if (validFor == TimeSpan.Zero || validFor == TimeSpan.MaxValue) return 0;
-
-                if (validFor.Value.TotalSeconds <= MaxSeconds)
-                {
-                    return (uint)validFor.Value.TotalSeconds;
-                }
 
                 expiresAt = DateTime.Now.Add(validFor.Value);
             }
@@ -1743,20 +1689,20 @@ namespace Enyim.Caching
 
 #region [ License information          ]
 /* ************************************************************
- *
+ * 
  *    Copyright (c) 2010 Attila Kisk? enyim.com
- *
+ *    
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
  *    You may obtain a copy of the License at
- *
+ *    
  *        http://www.apache.org/licenses/LICENSE-2.0
- *
+ *    
  *    Unless required by applicable law or agreed to in writing, software
  *    distributed under the License is distributed on an "AS IS" BASIS,
  *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  *    See the License for the specific language governing permissions and
  *    limitations under the License.
- *
+ *    
  * ************************************************************/
 #endregion
