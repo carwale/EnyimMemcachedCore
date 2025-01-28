@@ -102,7 +102,6 @@ namespace Enyim.Caching.Configuration
             CheckTimeout(nameof(ReceiveTimeout), ReceiveTimeout);
             CheckTimeout(nameof(DeadTimeout), DeadTimeout);
             CheckTimeout(nameof(QueueTimeout), QueueTimeout);
-            CheckTimeout(nameof(ConnectionIdleTimeout), ConnectionIdleTimeout);
         }
 
         private void CheckTimeout(string paramName, TimeSpan value)

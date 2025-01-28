@@ -418,8 +418,6 @@ namespace Enyim.Caching.Memcached
 
                     StartReconciliationTask();
 
-                    StartReconciliationTask();
-
                     if (_logger.IsEnabled(LogLevel.Debug))
                         _logger.LogDebug("Pool has been inited for {0} with {1} sockets", _endPoint, _minItems);
                 }
