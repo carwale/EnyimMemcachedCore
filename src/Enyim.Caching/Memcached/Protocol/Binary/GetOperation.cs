@@ -1,0 +1,89 @@
+using System.Collections.Generic;
+using System.Text;
+using Enyim.Caching.Memcached.Results;
+using Enyim.Caching.Memcached.Results.Extensions;
+using Enyim.Caching.Memcached.Results.Helpers;
+using Microsoft.Extensions.Logging;
+
+namespace Enyim.Caching.Memcached.Protocol.Binary
+{
+    public class GetOperation : BinarySingleItemOperation, IGetOperation
+    {
+        private readonly ILogger _logger;
+        private CacheItem _result;
+
+        public GetOperation(string key, ILogger logger) : base(key)
+        {
+            _logger = logger;
+        }
+
+        protected override BinaryRequest Build()
+        {
+            var request = new BinaryRequest(OpCode.Get)
+            {
+                Key = Key,
+                Cas = Cas
+            };
+
+            return request;
+        }
+
+        protected override IOperationResult ProcessResponse(BinaryResponse response)
+        {
+            var status = response.StatusCode;
+            var result = new BinaryOperationResult();
+
+            StatusCode = status;
+
+            if (status == 0)
+            {
+                int flags = BinaryConverter.DecodeInt32(response.Extra, 0);
+                _result = new CacheItem((ushort)flags, response.Data);
+                Cas = response.CAS;
+
+#if EVEN_MORE_LOGGING
+                if(_logger.IsEnabled(LogLevel.Debug))
+			        _logger.LogDebug("Get succeeded for key '{0}'.", Key);
+#endif
+
+                return result.Pass();
+            }
+
+            Cas = 0;
+
+#if EVEN_MORE_LOGGING
+            if(_logger.IsEnabled(LogLevel.Debug))
+			    _logger.LogDebug("Get failed for key '{0}'. Reason: {1}", Key, Encoding.ASCII.GetString(response.Data.Array, response.Data.Offset, response.Data.Count));
+#endif
+
+            var message = ResultHelper.ProcessResponseData(response.Data);
+            return result.Fail(message);
+        }
+
+        CacheItem IGetOperation.Result
+        {
+            get { return _result; }
+            set { _result = value; }
+        }
+    }
+}
+
+#region [ License information          ]
+/* ************************************************************
+ * 
+ *    Copyright (c) 2010 Attila Kisk? enyim.com
+ *    
+ *    Licensed under the Apache License, Version 2.0 (the "License");
+ *    you may not use this file except in compliance with the License.
+ *    You may obtain a copy of the License at
+ *    
+ *        http://www.apache.org/licenses/LICENSE-2.0
+ *    
+ *    Unless required by applicable law or agreed to in writing, software
+ *    distributed under the License is distributed on an "AS IS" BASIS,
+ *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *    See the License for the specific language governing permissions and
+ *    limitations under the License.
+ *    
+ * ************************************************************/
+#endregion

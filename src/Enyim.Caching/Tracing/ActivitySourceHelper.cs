@@ -8,6 +8,10 @@ using System.Diagnostics;
 
 namespace Enyim.Caching.Tracing
 {
+
+    /// <summary>
+    /// Static Class to Manage Activities actions for memcacheclient
+    /// </summary>
     internal static class ActivitySourceHelper
     {
         public const string ThreadIdTagName = "thread.id";
@@ -26,7 +30,7 @@ namespace Enyim.Caching.Tracing
 
         public static void AddTagsForKeys(this Activity? activity, IMemcachedNode node, IEnumerable<string> keys)
         {
-            const int maxTagLimit = 10; // Set maximum number of keys per tag
+            const int maxTagLimit = 10; // Set maximum number of keys per tag to avoid memory overflow ( Since multiget can have any number of keys )
 
             var keysToTag = keys.Take(maxTagLimit).ToList();
 
@@ -40,11 +44,11 @@ namespace Enyim.Caching.Tracing
             activity?.SetTag(StatusCodeTagName, "OK");
         } 
 
-        public static void SetException(this Activity activity, Exception exception)
+        public static void SetException(this Activity? activity, Exception exception)
         {
-            activity.SetTag(StatusCodeTagName, "ERROR");
-            activity.SetTag(StatusDescription, exception?.Message);
-            activity.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
+            activity?.SetTag(StatusCodeTagName, "ERROR");
+            activity?.SetTag(StatusDescription, exception?.Message);
+            activity?.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
             {
                 { "exception.type", exception?.GetType().FullName },
                 { "exception.message", exception?.Message },

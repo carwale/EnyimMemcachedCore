@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container: mcr.microsoft.com/dotnet/sdk:9.0
+
+    services:
+      memcached:
+        image: memcached:1.5.8
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Build
+      run: ./build.sh
+    - name: Test
+      run: ./test.sh
