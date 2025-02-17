@@ -1059,10 +1059,15 @@ namespace Enyim.Caching
 
         public IDictionary<string, CasResult<object>> GetWithCas(IEnumerable<string> keys)
         {
-            return PerformMultiGet<CasResult<object>>(keys, (mget, kvp) => new CasResult<object>
+            return PerformMultiGet<CasResult<object>>(keys, (mget, kvp) => 
             {
-                Result = this.transcoder.Deserialize(kvp.Value),
-                Cas = mget.Cas[kvp.Key]
+                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
+                var decompressedCacheItem = new CacheItem(kvp.Value.Flags, decompressedBytes);
+                return new CasResult<object>
+                {
+                    Result = this.transcoder.Deserialize(decompressedCacheItem),
+                    Cas = mget.Cas[kvp.Key]
+                };
             });
         }
         protected virtual IDictionary<string, T> PerformMultiGet<T>(IEnumerable<string> keys, Func<IMultiGetOperation, KeyValuePair<string, CacheItem>, T> collector)
