@@ -147,10 +147,14 @@ namespace Enyim.Caching
                     {
                         if (typeof(T).GetTypeCode() == TypeCode.Object && typeof(T) != typeof(Byte[]))
                         {
+                            var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
+                            command.Result = new CacheItem(command.Result.Flags, decompressedBytes);
                             return this.transcoder.Deserialize<T>(command.Result);
                         }
                         else
                         {
+                            var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
+                            command.Result = new CacheItem(command.Result.Flags, decompressedBytes);
                             var tempResult = this.transcoder.Deserialize(command.Result);
                             if (tempResult != null)
                             {
@@ -197,6 +201,8 @@ namespace Enyim.Caching
                     if (commandResult.Success)
                     {
                         result.Success = true;
+                        var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
+                        command.Result = new CacheItem(command.Result.Flags, decompressedBytes);
                         result.Value = transcoder.Deserialize<T>(command.Result);
                         return result;
                     }
