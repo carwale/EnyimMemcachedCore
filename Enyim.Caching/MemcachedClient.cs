@@ -191,6 +191,16 @@ namespace Enyim.Caching
             var hashedKey = this.keyTransformer.Transform(key);
             var node = this.pool.Locate(hashedKey);
 
+
+            #if NET6_0
+            using var activity = ActivitySourceHelper.StartActivity("PerformTryGet", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key),
+                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
+                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
+            });
+            # endif
+
             if (node != null)
             {
                 try
@@ -199,22 +209,31 @@ namespace Enyim.Caching
                     var commandResult = await node.ExecuteAsync(command);
 
                     if (commandResult.Success)
-                    {
+                    {                    
                         result.Success = true;
                         var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
                         command.Result = new CacheItem(command.Result.Flags, decompressedBytes);
                         result.Value = transcoder.Deserialize<T>(command.Result);
+                        #if NET6_0
+                        activity.SetSuccess();
+                        # endif
                         return result;
                     }
                 }
                 catch (Exception ex)
                 {
+                    #if NET6_0
+                    activity.SetException(result.Exception);
+                    # endif
                     _logger.LogError(0, ex, $"{nameof(GetAsync)}(\"{key}\")");
                     throw ex;
                 }
             }
             else
             {
+                #if NET6_0
+                activity.SetException(new Exception("Unable to locate node"));
+                # endif
                 _logger.LogError($"Unable to locate memcached node");
             }
 
