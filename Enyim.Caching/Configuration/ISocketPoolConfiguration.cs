@@ -29,6 +29,16 @@ namespace Enyim.Caching.Configuration
 		}
 
 		/// <summary>
+        /// Gets or sets a value that specifies the amount of time a connection can stay idle in the pool before being closed, if number of connections exceeds MinimumPoolSize
+        /// </summary>
+        /// <returns>The value of the connection timeout.</returns>
+        TimeSpan ConnectionIdleTimeout
+        {
+            get;
+            set;
+        }
+
+		/// <summary>
 		/// Gets or sets a value that specifies the amount of time after which the connection attempt will fail.
 		/// </summary>
 		/// <returns>The value of the connection timeout.</returns>

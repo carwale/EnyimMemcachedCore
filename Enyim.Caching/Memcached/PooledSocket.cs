@@ -119,6 +119,7 @@ namespace Enyim.Caching.Memcached
 
         private void OnConnectCompleted(object sender, SocketAsyncEventArgs args)
         {
+            LastConnectionTimestamp = DateTime.UtcNow;
             EventWaitHandle handle = (EventWaitHandle)args.UserToken;
             handle.Set();
         }

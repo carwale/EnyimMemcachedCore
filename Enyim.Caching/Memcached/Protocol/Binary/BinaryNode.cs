@@ -19,6 +19,7 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
 	{
         private readonly ILogger _logger;
 		ISaslAuthenticationProvider authenticationProvider;
+		private readonly IMetricFunctions _metricFunctions;
 
 		public BinaryNode(
             EndPoint endpoint, 
@@ -29,6 +30,7 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
 		{
 			this.authenticationProvider = authenticationProvider;
             _logger = logger;
+			_metricFunctions = metricFunctions;
 		}
 
 		/// <summary>

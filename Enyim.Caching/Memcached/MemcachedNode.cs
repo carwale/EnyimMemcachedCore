@@ -203,7 +203,7 @@ namespace Enyim.Caching.Memcached
             /// <summary>
             /// A list of already connected but free to use sockets
             /// </summary>
-            private InterlockedStack<PooledSocket> freeItems;
+            private LinkedList<PooledSocket> freeItems;
 
             private bool isDisposed;
             private bool isAlive;
@@ -214,8 +214,11 @@ namespace Enyim.Caching.Memcached
 
             private MemcachedNode ownerNode;
             private EndPoint endPoint;
+            private readonly string endPointStr;
             private TimeSpan queueTimeout;
-            private Semaphore semaphore;
+            private readonly TimeSpan connectionIdleTimeout;
+            private SemaphoreSlim semaphore;
+            private readonly SemaphoreSlim cleanSemaphore;
 
             private object initLock = new Object();
 
@@ -235,12 +238,15 @@ namespace Enyim.Caching.Memcached
                 this.isAlive = true;
                 this.endPoint = ownerNode.EndPoint;
                 this.queueTimeout = config.QueueTimeout;
+                this.connectionIdleTimeout = config.ConnectionIdleTimeout;
+                this.endPointStr = this.endPoint.ToString().Replace("Unspecified/", string.Empty);
 
                 this.minItems = config.MinPoolSize;
                 this.maxItems = config.MaxPoolSize;
 
-                this.semaphore = new Semaphore(maxItems, maxItems);
-                this.freeItems = new InterlockedStack<PooledSocket>();
+                this.semaphore = new SemaphoreSlim(maxItems, maxItems);
+                this.freeItems = new LinkedList<PooledSocket>();
+                this.cleanSemaphore = new(1);
 
                 _logger = logger;
                 _metricFunctions = metricFunctions;
@@ -255,13 +261,15 @@ namespace Enyim.Caching.Memcached
                     {
                         for (int i = 0; i < this.minItems; i++)
                         {
-                            this.freeItems.Push(this.CreateSocket());
+                            this.freeItems.AddFirst(this.CreateSocket());
 
                             // cannot connect to the server
                             if (!this.isAlive)
                                 break;
                         }
                     }
+
+                    StartReconciliationTask();
 
                     if (_logger.IsEnabled(LogLevel.Debug))
                         _logger.LogDebug("Pool has been inited for {0} with {1} sockets", this.endPoint, this.minItems);
@@ -273,6 +281,94 @@ namespace Enyim.Caching.Memcached
 
                     this.MarkAsDead();
                 }
+            }
+
+            private void StartReconciliationTask()
+            {
+                if (this.connectionIdleTimeout == TimeSpan.Zero)
+                    return;
+
+                var reconcileTimer = new PeriodicTimer(this.connectionIdleTimeout);
+                _ = RunTimer();
+
+                async Task RunTimer()
+                {
+                    while (await reconcileTimer.WaitForNextTickAsync().ConfigureAwait(false))
+                    {
+                        try
+                        {
+                            using var source = new CancellationTokenSource(this.connectionIdleTimeout);
+                            await ReconcileAsync(source.Token).ConfigureAwait(false);
+                            _metricFunctions.Set("cache_connection_count", (ulong)(maxItems - this.semaphore.CurrentCount + this.freeItems.Count), this.endPointStr);
+                        }
+                        catch (Exception e)
+                        {
+                            _logger.LogWarning("ReconciliationTaskFailed", new EventId(0), e);
+                        }
+                    }
+                }
+
+            }
+
+            private async Task ReconcileAsync(CancellationToken cancellationToken)
+            {
+                // synchronize access to this method as only one clean routine should be run at a time
+                await this.cleanSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    var waitTimeout = TimeSpan.FromMilliseconds(10);
+                    while (true)
+                    {
+
+                            // Calculate if current connection count <= minimum pool size
+                        if (maxItems - this.semaphore.CurrentCount + this.freeItems.Count <= minItems)
+                                return;
+
+                        if (!await this.semaphore.WaitAsync(waitTimeout, cancellationToken).ConfigureAwait(false))
+                            return;
+
+                        try
+                        {
+                            PooledSocket retval = null;
+                            lock (this.freeItems)
+                            {
+                                if (this.freeItems.Count > 0)
+                                {
+                                    retval = this.freeItems.Last!.Value;
+                                    this.freeItems.RemoveLast();
+                                }
+                            }
+
+                            if (retval is null)
+                                return;
+
+                            var idleTime = DateTime.UtcNow - retval.LastConnectionTimestamp;
+
+
+                            if (idleTime > this.connectionIdleTimeout)
+                            {
+                                _logger.LogInformation("{0} pool found session {1} to clean up", ownerNode, retval.InstanceId);
+                                retval.Destroy();
+                            }
+                            else
+                            {
+                                lock (this.freeItems)
+                                    this.freeItems.AddLast(retval);
+                                return;
+                            }
+                        }
+                        finally
+                        {
+                            this.semaphore.Release();
+                        }
+                    }
+
+                }
+                finally
+                {
+                    this.cleanSemaphore.Release();
+                }
+
             }
 
             private PooledSocket CreateSocket()
@@ -316,7 +412,7 @@ namespace Enyim.Caching.Memcached
 
                 PooledSocket retval = null;
 
-                if (!this.semaphore.WaitOne(this.queueTimeout))
+                if (!this.semaphore.Wait(this.queueTimeout))
                 {
                     message = "Pool is full, timeouting. " + this.endPoint;
                     if (_isDebugEnabled) _logger.LogDebug(message);
@@ -329,6 +425,7 @@ namespace Enyim.Caching.Memcached
                 // maybe we died while waiting
                 if (!this.isAlive)
                 {
+                    this.semaphore.Release();
                     message = "Pool is dead, returning null. " + this.endPoint;
                     if (_isDebugEnabled) _logger.LogDebug(message);
                     result.Fail(message);
@@ -336,9 +433,18 @@ namespace Enyim.Caching.Memcached
                     return result;
                 }
 
+                lock (this.freeItems)
+                {
+                    if (this.freeItems.Count > 0)
+                    {
+                        retval = this.freeItems.First!.Value;
+                        this.freeItems.RemoveFirst();
+                    }
+                }
+
 
                 // do we have free items?
-                if (this.freeItems.TryPop(out retval))
+                if (retval is not null)
                 {
                     #region [ get it from the pool         ]
 
@@ -360,6 +466,7 @@ namespace Enyim.Caching.Memcached
                         _logger.LogError(message, e);
 
                         this.MarkAsDead();
+                        this.semaphore.Release();
                         result.Fail(message, e);
                         return result;
                     }
@@ -444,7 +551,9 @@ namespace Enyim.Caching.Memcached
                     if (socket.IsAlive)
                     {
                         // mark the item as free
-                        this.freeItems.Push(socket);
+                         lock (this.freeItems) {
+                            this.freeItems.AddFirst(socket);
+                         }
 
                         // signal the event so if someone is waiting for it can reuse this item
                         this.semaphore.Release();
@@ -490,12 +599,19 @@ namespace Enyim.Caching.Memcached
                 {
                     this.isAlive = false;
                     this.isDisposed = true;
-                    PooledSocket ps;
 
-                    while (this.freeItems.TryPop(out ps))
+                     lock (this.freeItems)
                     {
-                        try { ps.Destroy(); }
-                        catch { }
+                        while (this.freeItems.Count > 0)
+                        {
+                            try
+                            {
+                                PooledSocket ps = this.freeItems.First!.Value;
+                                this.freeItems.RemoveFirst();
+                                ps.Destroy();
+                            }
+                            catch { }
+                        }
                     }
 
                     this.ownerNode = null;
