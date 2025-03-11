@@ -14,7 +14,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Caching.Distributed;
 
-#if NET6_0
+#if NET6_0 || NET8_0
 using Enyim.Caching.Tracing;
 # endif
 
@@ -192,14 +192,14 @@ namespace Enyim.Caching
             var node = this.pool.Locate(hashedKey);
 
 
-            #if NET6_0
+#if NET6_0 || NET8_0
             using var activity = ActivitySourceHelper.StartActivity("PerformTryGet", new[]
             {
                 new KeyValuePair<string, object?>("net.peer.query.key", key),
                 new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
                 new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
             });
-            # endif
+#endif
 
             if (node != null)
             {
@@ -209,31 +209,31 @@ namespace Enyim.Caching
                     var commandResult = await node.ExecuteAsync(command);
 
                     if (commandResult.Success)
-                    {                    
+                    {
                         result.Success = true;
                         var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
                         command.Result = new CacheItem(command.Result.Flags, decompressedBytes);
                         result.Value = transcoder.Deserialize<T>(command.Result);
-                        #if NET6_0
+#if NET6_0 || NET8_0
                         activity.SetSuccess();
-                        # endif
+#endif
                         return result;
                     }
                 }
                 catch (Exception ex)
                 {
-                    #if NET6_0
+#if NET6_0 || NET8_0
                     activity.SetException(result.Exception);
-                    # endif
+#endif
                     _logger.LogError(0, ex, $"{nameof(GetAsync)}(\"{key}\")");
                     throw ex;
                 }
             }
             else
             {
-                #if NET6_0
+#if NET6_0 || NET8_0
                 activity.SetException(new Exception("Unable to locate node"));
-                # endif
+#endif
                 _logger.LogError($"Unable to locate memcached node");
             }
 
@@ -297,14 +297,14 @@ namespace Enyim.Caching
             var node = this.pool.Locate(hashedKey);
             var result = GetOperationResultFactory.Create();
 
-            #if NET6_0
+#if NET6_0 || NET8_0
             using var activity = ActivitySourceHelper.StartActivity("PerformTryGet", new[]
             {
                 new KeyValuePair<string, object?>("net.peer.query.key", key),
                 new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
                 new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
             });
-            # endif
+#endif
 
             _logger.LogInformation($"Inside PerformTryGet");
 
@@ -323,17 +323,17 @@ namespace Enyim.Caching
                     result.Value = value = this.transcoder.Deserialize(command.Result);
                     result.Cas = cas = command.CasValue;
 
-                    #if NET6_0
+#if NET6_0 || NET8_0
                     activity.SetSuccess();
-                    # endif
+#endif
                     result.Pass();
                     return result;
                 }
                 else
                 {
-                    #if NET6_0
+#if NET6_0 || NET8_0
                     activity.SetException(result.Exception);
-                    # endif
+#endif
                     commandResult.Combine(result);
                     return result;
                 }
@@ -341,9 +341,9 @@ namespace Enyim.Caching
 
             result.Value = value;
             result.Cas = cas;
-            #if NET6_0
+#if NET6_0 || NET8_0
             activity.SetException(new Exception("Unable to locate node"));
-            # endif
+#endif
             result.Fail("Unable to locate node");
             return result;
         }
@@ -490,14 +490,14 @@ namespace Enyim.Caching
             var result = StoreOperationResultFactory.Create();
 
 
-            #if NET6_0
+#if NET6_0 || NET8_0
             using var activity = ActivitySourceHelper.StartActivity("PerformStore", new[]
             {
                 new KeyValuePair<string, object?>("net.peer.query.key", key),
                 new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
                 new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
             });
-            # endif
+#endif
 
             statusCode = -1;
 
@@ -507,9 +507,9 @@ namespace Enyim.Caching
             {
                 CacheItem item;
 
-                try 
-                { 
-                    item = this.transcoder.Serialize(value); 
+                try
+                {
+                    item = this.transcoder.Serialize(value);
                     item.Data = ZSTDCompression.Compress(item.Data, _logger);
                 }
                 catch (Exception e)
@@ -528,25 +528,25 @@ namespace Enyim.Caching
 
                 if (commandResult.Success)
                 {
-                    #if NET6_0
-                activity.SetSuccess();
-            # endif
+#if NET6_0 || NET8_0
+                    activity.SetSuccess();
+#endif
                     result.Pass();
                     return result;
                 }
 
-                #if NET6_0
-                    activity.SetException(result.Exception);
-                    # endif
+#if NET6_0 || NET8_0
+                activity.SetException(result.Exception);
+#endif
                 commandResult.Combine(result);
                 return result;
             }
 
             //if (this.performanceMonitor != null) this.performanceMonitor.Store(mode, 1, false);
 
-            #if NET6_0
+#if NET6_0 || NET8_0
             activity.SetException(new Exception("Unable to locate node"));
-            # endif
+#endif
             result.Fail("Unable to locate node");
             return result;
         }
@@ -557,27 +557,27 @@ namespace Enyim.Caching
             var node = this.pool.Locate(hashedKey);
             var result = StoreOperationResultFactory.Create();
 
-            #if NET6_0
+#if NET6_0 || NET8_0
             using var activity = ActivitySourceHelper.StartActivity("PerformStoreAsync", new[]
             {
                 new KeyValuePair<string, object?>("net.peer.query.key", key),
                 new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
                 new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
             });
-            # endif
+#endif
 
             int statusCode = -1;
             ulong cas = 0;
-            
+
             //Removed null check on value parameter, in order to allow storing null
 
             if (node != null)
             {
                 CacheItem item;
 
-                try 
-                { 
-                    item = this.transcoder.Serialize(value); 
+                try
+                {
+                    item = this.transcoder.Serialize(value);
                     item.Data = ZSTDCompression.Compress(item.Data, _logger);
                 }
                 catch (Exception e)
@@ -596,25 +596,25 @@ namespace Enyim.Caching
 
                 if (commandResult.Success)
                 {
-                    #if NET6_0
-                activity.SetSuccess();
-            # endif
+#if NET6_0 || NET8_0
+                    activity.SetSuccess();
+#endif
                     result.Pass();
                     return result;
                 }
 
-                #if NET6_0
-                    activity.SetException(result.Exception);
-                    # endif
+#if NET6_0 || NET8_0
+                activity.SetException(result.Exception);
+#endif
                 commandResult.Combine(result);
                 return result;
             }
 
             //if (this.performanceMonitor != null) this.performanceMonitor.Store(mode, 1, false);
 
-            #if NET6_0
+#if NET6_0 || NET8_0
             activity.SetException(new Exception("Unable to locate node"));
-            # endif
+#endif
             result.Fail("Unable to locate memcached node");
             return result;
         }
@@ -825,14 +825,14 @@ namespace Enyim.Caching
             var node = this.pool.Locate(hashedKey);
             var result = MutateOperationResultFactory.Create();
 
-            #if NET6_0
+#if NET6_0 || NET8_0
             using var activity = ActivitySourceHelper.StartActivity("PerformMutate", new[]
             {
                 new KeyValuePair<string, object?>("net.peer.query.key", key),
                 new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
                 new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
             });
-            # endif
+#endif
 
             if (node != null)
             {
@@ -845,26 +845,26 @@ namespace Enyim.Caching
                 if (commandResult.Success)
                 {
                     result.Value = command.Result;
-                    #if NET6_0
-                activity.SetSuccess();
-            # endif
+#if NET6_0 || NET8_0
+                    activity.SetSuccess();
+#endif
                     result.Pass();
                     return result;
                 }
                 else
                 {
-                    #if NET6_0
+#if NET6_0 || NET8_0
                     activity.SetException(result.Exception);
-                    # endif
+#endif
                     result.InnerResult = commandResult;
                     result.Fail("Mutate operation failed, see InnerResult or StatusCode for more details");
                 }
 
             }
 
-            #if NET6_0
+#if NET6_0 || NET8_0
             activity.SetException(new Exception("Unable to locate node"));
-            # endif
+#endif
             // TODO not sure about the return value when the command fails
             result.Fail("Unable to locate node");
             return result;
@@ -934,14 +934,14 @@ namespace Enyim.Caching
             var node = this.pool.Locate(hashedKey);
             var result = ConcatOperationResultFactory.Create();
 
-            #if NET6_0
+#if NET6_0 || NET8_0
             using var activity = ActivitySourceHelper.StartActivity("PerformConcatenate", new[]
             {
                 new KeyValuePair<string, object?>("net.peer.query.key", key),
                 new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
                 new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
             });
-            # endif
+#endif
 
             if (node != null)
             {
@@ -952,16 +952,16 @@ namespace Enyim.Caching
                 {
                     result.Cas = cas = command.CasValue;
                     result.StatusCode = command.StatusCode;
-                    #if NET6_0
-                activity.SetSuccess();
-            # endif
+#if NET6_0 || NET8_0
+                    activity.SetSuccess();
+#endif
                     result.Pass();
                 }
                 else
                 {
-                    #if NET6_0
+#if NET6_0 || NET8_0
                     activity.SetException(result.Exception);
-                    # endif
+#endif
                     result.InnerResult = commandResult;
                     result.Fail("Concat operation failed, see InnerResult or StatusCode for details");
                 }
@@ -969,9 +969,9 @@ namespace Enyim.Caching
                 return result;
             }
 
-            #if NET6_0
+#if NET6_0 || NET8_0
             activity.SetException(new Exception("Unable to locate node"));
-            # endif
+#endif
             result.Fail("Unable to locate node");
             return result;
         }
@@ -983,19 +983,19 @@ namespace Enyim.Caching
         /// </summary>
         public void FlushAll()
         {
-            #if NET6_0
+#if NET6_0 || NET8_0
             using var activity = ActivitySourceHelper.StartActivity("FlushALL");
 
-            # endif
+#endif
             foreach (var node in this.pool.GetWorkingNodes())
             {
                 var command = this.pool.OperationFactory.Flush();
 
                 node.Execute(command);
             }
-            #if NET6_0
-                activity.SetSuccess();
-            # endif
+#if NET6_0 || NET8_0
+            activity.SetSuccess();
+#endif
         }
 
         /// <summary>
@@ -1009,9 +1009,9 @@ namespace Enyim.Caching
 
         public ServerStats Stats(string type)
         {
-            #if NET6_0
+#if NET6_0 || NET8_0
             using var activity = ActivitySourceHelper.StartActivity("Stats");
-            # endif
+#endif
             var results = new Dictionary<EndPoint, Dictionary<string, string>>();
             var tasks = new List<Task>();
 
@@ -1034,9 +1034,9 @@ namespace Enyim.Caching
                 Task.WaitAll(tasks.ToArray());
             }
 
-            #if NET6_0
-                activity.SetSuccess();
-            # endif
+#if NET6_0 || NET8_0
+            activity.SetSuccess();
+#endif
 
             return new ServerStats(results);
         }
@@ -1084,7 +1084,7 @@ namespace Enyim.Caching
 
         public IDictionary<string, CasResult<object>> GetWithCas(IEnumerable<string> keys)
         {
-            return PerformMultiGet<CasResult<object>>(keys, (mget, kvp) => 
+            return PerformMultiGet<CasResult<object>>(keys, (mget, kvp) =>
             {
                 var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
                 var decompressedCacheItem = new CacheItem(kvp.Value.Flags, decompressedBytes);
@@ -1099,9 +1099,9 @@ namespace Enyim.Caching
         {
             // transform the keys and index them by hashed => original
             // the mget results will be mapped using this index
-            #if NET6_0
+#if NET6_0 || NET8_0
             using var activity = ActivitySourceHelper.StartActivity("PerformMultiGet");
-            # endif
+#endif
             var hashed = new Dictionary<string, string>();
             foreach (var key in keys) hashed[this.keyTransformer.Transform(key)] = key;
 
@@ -1115,9 +1115,9 @@ namespace Enyim.Caching
             {
                 var node = slice.Key;
 
-                #if NET6_0
+#if NET6_0 || NET8_0
                 activity.AddTagsForKeys(node, keys);
-                # endif
+#endif
 
                 var nodeKeys = slice.Value;
                 var mget = this.pool.OperationFactory.MultiGet(nodeKeys);
@@ -1148,9 +1148,9 @@ namespace Enyim.Caching
                     }
                     catch (Exception e)
                     {
-                        # if NET6_0
+#if NET6_0 || NET8_0
                         activity.SetException(e);
-                        # endif
+#endif
                         _logger.LogError(0, e, "PerformMultiGet");
                     }
                 }));
@@ -1162,9 +1162,9 @@ namespace Enyim.Caching
                 Task.WaitAll(tasks.ToArray());
             }
 
-            #if NET6_0
-                activity.SetSuccess();
-                # endif
+#if NET6_0 || NET8_0
+            activity.SetSuccess();
+#endif
 
             return retval;
         }
@@ -1173,9 +1173,9 @@ namespace Enyim.Caching
         {
             // transform the keys and index them by hashed => original
             // the mget results will be mapped using this index
-            #if NET6_0
+#if NET6_0 || NET8_0
             using var activity = ActivitySourceHelper.StartActivity("PerformMultiGetAsync");
-            # endif
+#endif
             var hashed = new Dictionary<string, string>();
             foreach (var key in keys)
             {
@@ -1191,9 +1191,9 @@ namespace Enyim.Caching
             foreach (var slice in byServer)
             {
                 var node = slice.Key;
-                #if NET6_0
+#if NET6_0 || NET8_0
                 activity.AddTagsForKeys(node, keys);
-                # endif
+#endif
                 var nodeKeys = slice.Value;
                 var mget = this.pool.OperationFactory.MultiGet(nodeKeys);
                 var task = Task.Run(async () =>
@@ -1213,9 +1213,9 @@ namespace Enyim.Caching
             }
 
             await Task.WhenAll(tasks);
-            #if NET6_0
-                activity.SetSuccess();
-                # endif
+#if NET6_0 || NET8_0
+            activity.SetSuccess();
+#endif
             return retval;
         }
 

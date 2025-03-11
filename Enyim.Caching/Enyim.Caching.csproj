@@ -2,8 +2,9 @@
 
   <PropertyGroup>
     <Description>CWMemcache is a Memcached client library for .NET Core. Usage: Add services.AddEnyimMemcached(...) and app.UseEnyimMemcached() in Startup. Add IMemcachedClient into constructor.</Description>
-    <VersionPrefix>3.2.0</VersionPrefix>
-    <TargetFrameworks>net6.0</TargetFrameworks>
+    <VersionPrefix>4.0.1</VersionPrefix>
+    <EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
+    <TargetFrameworks>net8.0;net6.0</TargetFrameworks>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>CWMemcache</AssemblyName>
     <PackageId>CWMemcache</PackageId>
@@ -37,7 +38,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.2.0" />
     <PackageReference Include="Newtonsoft.Json.Bson" Version="1.0.2" />
     <PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.4" />
-    <PackageReference Include="AEPLCore.Monitoring" Version="2.6.1" />
+    <PackageReference Include="AEPLCore.Monitoring" Version="3.0.3" />
     <PackageReference Include="ZstdSharp.Port" Version="0.8.1" />
   </ItemGroup>
 </Project>
