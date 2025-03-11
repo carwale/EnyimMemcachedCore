@@ -1,4 +1,4 @@
-#if NET6_0
+#if NET6_0 || NET8_0
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -40,9 +40,10 @@ namespace Enyim.Caching.Tracing
             activity?.SetTag(tag, tagValue);
         }
 
-        public static void SetSuccess(this Activity? activity) {
+        public static void SetSuccess(this Activity? activity)
+        {
             activity?.SetTag(StatusCodeTagName, "OK");
-        } 
+        }
 
         public static void SetException(this Activity? activity, Exception exception)
         {
@@ -64,4 +65,4 @@ namespace Enyim.Caching.Tracing
         }
     }
 }
-# endif
+#endif
