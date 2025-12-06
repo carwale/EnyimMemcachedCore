@@ -7,9 +7,11 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
 	/// <summary>
 	/// Starts the SASL auth sequence.
 	/// </summary>
-	public class SaslStart(ISaslAuthenticationProvider provider) : SaslStep(provider)
+	public class SaslStart : SaslStep
 	{
-        protected override BinaryRequest Build()
+		public SaslStart(ISaslAuthenticationProvider provider) : base(provider) { }
+
+		protected override BinaryRequest Build()
 		{
 			// create a Sasl Start command
 			var request = new BinaryRequest(OpCode.SaslStart)

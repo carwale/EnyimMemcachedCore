@@ -6,8 +6,10 @@ using Enyim.Caching.Memcached.Results.Extensions;
 
 namespace Enyim.Caching.Memcached.Protocol.Binary
 {
-    public abstract class BinarySingleItemOperation(string key) : SingleItemOperation(key)
+    public abstract class BinarySingleItemOperation : SingleItemOperation
     {
+        protected BinarySingleItemOperation(string key) : base(key) { }
+
         protected abstract BinaryRequest Build();
 
         protected internal override IList<ArraySegment<byte>> GetBuffer()

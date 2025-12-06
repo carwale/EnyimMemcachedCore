@@ -6,11 +6,12 @@ using Enyim.Caching.Memcached.Results.Helpers;
 
 namespace Enyim.Caching.Memcached.Protocol.Binary
 {
-	public class DeleteOperation(string key) : BinarySingleItemOperation(key), IDeleteOperation
+	public class DeleteOperation : BinarySingleItemOperation, IDeleteOperation
 	{
 		private static readonly Enyim.Caching.ILog log = Enyim.Caching.LogManager.GetLogger(typeof(DeleteOperation));
+		public DeleteOperation(string key) : base(key) { }
 
-        protected override BinaryRequest Build()
+		protected override BinaryRequest Build()
 		{
 			var request = new BinaryRequest(OpCode.Delete)
 			{
@@ -47,7 +48,7 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
 #region [ License information          ]
 /* ************************************************************
  * 
- *    Copyright (c) 2010 Attila Kiskï¿½, enyim.com
+ *    Copyright (c) 2010 Attila Kiskó, enyim.com
  *    
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.

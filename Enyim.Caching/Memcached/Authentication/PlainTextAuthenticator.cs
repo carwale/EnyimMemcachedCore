@@ -37,9 +37,9 @@ namespace Enyim.Caching.Memcached
 
         private string GetParameter(Dictionary<string, object> parameters, string key)
         {
-            if (parameters.TryGetValue(key, out object value))
+            if (parameters.ContainsKey(key))
             {
-                return (string)value;
+                return (string)parameters[key];
             }
             else
             {

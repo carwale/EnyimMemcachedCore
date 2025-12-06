@@ -10,12 +10,13 @@ namespace Enyim.Caching.Memcached
 	public class SHA1KeyTransformer : KeyTransformerBase
 	{
 		public override string Transform(string key)
-        {
-            byte[] data = SHA1.HashData(Encoding.Unicode.GetBytes(key));
+		{
+            var sh = SHA1.Create();
+			byte[] data = sh.ComputeHash(Encoding.Unicode.GetBytes(key));
 
-            return Convert.ToBase64String(data);
-        }
-    }
+			return Convert.ToBase64String(data);
+		}
+	}
 }
 
 #region [ License information          ]

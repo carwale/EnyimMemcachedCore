@@ -7,21 +7,31 @@ using System.Threading.Tasks;
 
 namespace Enyim.Caching.Memcached.Protocol.Binary
 {
-    public class StoreOperation(StoreMode mode, string key, CacheItem value, uint expires) : BinarySingleItemOperation(key), IStoreOperation
+    public class StoreOperation : BinarySingleItemOperation, IStoreOperation
     {
-        private readonly StoreMode mode = mode;
-        private CacheItem value = value;
-        private readonly uint expires = expires;
+        private readonly StoreMode mode;
+        private CacheItem value;
+        private readonly uint expires;
+
+        public StoreOperation(StoreMode mode, string key, CacheItem value, uint expires) :
+            base(key)
+        {
+            this.mode = mode;
+            this.value = value;
+            this.expires = expires;
+        }
 
         protected override BinaryRequest Build()
         {
-            var op = this.mode switch
+            OpCode op;
+            switch (this.mode)
             {
-                StoreMode.Add => OpCode.Add,
-                StoreMode.Set => OpCode.Set,
-                StoreMode.Replace => OpCode.Replace,
-                _ => throw new ArgumentOutOfRangeException("mode", mode + " is not supported"),
-            };
+                case StoreMode.Add: op = OpCode.Add; break;
+                case StoreMode.Set: op = OpCode.Set; break;
+                case StoreMode.Replace: op = OpCode.Replace; break;
+                default: throw new ArgumentOutOfRangeException("mode", mode + " is not supported");
+            }
+
             var extra = new byte[8];
 
             BinaryConverter.EncodeUInt32((uint)this.value.Flags, extra, 0);

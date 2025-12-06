@@ -35,7 +35,7 @@ namespace Enyim.Caching.Memcached
         private readonly ISocketPoolConfiguration _config;
         private InternalPoolImpl internalPoolImpl;
         private bool isInitialized = false;
-        private SemaphoreSlim poolInitSemaphore = new(1, 1);
+        private SemaphoreSlim poolInitSemaphore = new SemaphoreSlim(1, 1);
         private readonly TimeSpan _initPoolTimeout;
 
         public MemcachedNode(
@@ -289,7 +289,7 @@ namespace Enyim.Caching.Memcached
             private readonly TimeSpan _receiveTimeout;
             private readonly TimeSpan _connectionIdleTimeout;
             private SemaphoreSlim _semaphore;
-            private readonly object initLock = new();
+            private readonly object initLock = new Object();
             private readonly SemaphoreSlim _cleanSemaphore;
             private readonly IMetricFunctions _metricFunctions;
 
@@ -851,7 +851,10 @@ namespace Enyim.Caching.Memcached
                         {
                             // make sure to signal the Acquire so it can create a new conenction
                             // if the failure policy keeps the pool alive
-                            _semaphore?.Release();
+                            if (_semaphore != null)
+                            {
+                                _semaphore.Release();
+                            }
                         }
                     }
                 }
@@ -865,7 +868,10 @@ namespace Enyim.Caching.Memcached
                     }
                     finally
                     {
-                        _semaphore?.Release();
+                        if (_semaphore != null)
+                        {
+                            _semaphore.Release();
+                        }
                     }
                 }
             }
@@ -923,7 +929,7 @@ namespace Enyim.Caching.Memcached
         #region [ Comparer                     ]
         internal sealed class Comparer : IEqualityComparer<IMemcachedNode>
         {
-            public static readonly Comparer Instance = new();
+            public static readonly Comparer Instance = new Comparer();
 
             bool IEqualityComparer<IMemcachedNode>.Equals(IMemcachedNode x, IMemcachedNode y)
             {

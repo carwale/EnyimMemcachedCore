@@ -27,18 +27,30 @@ namespace Microsoft.Extensions.DependencyInjection
 
         public static IServiceCollection AddEnyimMemcached(this IServiceCollection services, Action<MemcachedClientOptions> setupAction)
         {
-            ArgumentNullException.ThrowIfNull(services);
+            if (services == null)
+            {
+                throw new ArgumentNullException(nameof(services));
+            }
 
-            ArgumentNullException.ThrowIfNull(setupAction);
+            if (setupAction == null)
+            {
+                throw new ArgumentNullException(nameof(setupAction));
+            }
 
             return AddEnyimMemcachedInternal(services, s => s.Configure(setupAction));
         }
 
         public static IServiceCollection AddEnyimMemcached(this IServiceCollection services, IConfigurationSection configurationSection)
         {
-            ArgumentNullException.ThrowIfNull(services);
+            if (services == null)
+            {
+                throw new ArgumentNullException(nameof(services));
+            }
 
-            ArgumentNullException.ThrowIfNull(configurationSection);
+            if (configurationSection == null)
+            {
+                throw new ArgumentNullException(nameof(configurationSection));
+            }
 
             if (!configurationSection.Exists())
             {
@@ -50,9 +62,15 @@ namespace Microsoft.Extensions.DependencyInjection
 
         public static IServiceCollection AddEnyimMemcached(this IServiceCollection services, IConfiguration configuration, string sectionKey = "enyimMemcached")
         {
-            ArgumentNullException.ThrowIfNull(services);
+            if (services == null)
+            {
+                throw new ArgumentNullException(nameof(services));
+            }
 
-            ArgumentNullException.ThrowIfNull(configuration);
+            if (configuration == null)
+            {
+                throw new ArgumentNullException(nameof(configuration));
+            }
 
             var section = configuration.GetSection(sectionKey);
             if (!section.Exists())
@@ -73,8 +91,8 @@ namespace Microsoft.Extensions.DependencyInjection
             services.TryAddSingleton<IMemcachedClientConfiguration, MemcachedClientConfiguration>();
             services.AddSingleton<MemcachedClient>();
 
-            services.AddSingleton<IMemcachedClient, MemcachedClient>();
-            services.AddSingleton<IDistributedCache, MemcachedClient>();
+            services.AddSingleton<IMemcachedClient>(factory => factory.GetService<MemcachedClient>());
+            services.AddSingleton<IDistributedCache>(factory => factory.GetService<MemcachedClient>());
 
             return services;
         }

@@ -9,13 +9,15 @@ using Enyim.Caching.Memcached.Results.Extensions;
 
 namespace Enyim.Caching.Memcached.Protocol.Binary
 {
-    public class MultiGetOperation(IList<string> keys) : BinaryMultiItemOperation(keys), IMultiGetOperation
+    public class MultiGetOperation : BinaryMultiItemOperation, IMultiGetOperation
     {
         private static readonly Enyim.Caching.ILog log = Enyim.Caching.LogManager.GetLogger(typeof(MultiGetOperation));
 
         private Dictionary<string, CacheItem> result;
         private Dictionary<int, string> idToKey;
         private int noopId;
+
+        public MultiGetOperation(IList<string> keys) : base(keys) { }
 
         protected override BinaryRequest Build(string key)
         {

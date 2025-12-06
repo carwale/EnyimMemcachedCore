@@ -9,30 +9,40 @@ namespace Enyim.Caching.Memcached
     /// <summary>
     /// This is a ketama-like consistent hashing based node locator. Used when no other <see cref="T:IMemcachedNodeLocator"/> is specified for the pool.
     /// </summary>
-    public sealed class DefaultNodeLocator(int serverAddressMutations) : IMemcachedNodeLocator, IDisposable
+    public sealed class DefaultNodeLocator : IMemcachedNodeLocator, IDisposable
     {
+        private readonly int _serverAddressMutations;
 
         // holds all server keys for mapping an item key to the server consistently
         private ulong[] _keys;
         // used to lookup a server based on its key
-        private Dictionary<ulong, IMemcachedNode> _servers = new(new ULongEqualityComparer());
-        private Dictionary<IMemcachedNode, bool> _deadServers = [];
-        private List<IMemcachedNode> _allServers = [];
-        private ReaderWriterLockSlim _serverAccessLock = new();
+        private Dictionary<ulong, IMemcachedNode> _servers;
+        private Dictionary<IMemcachedNode, bool> _deadServers;
+        private List<IMemcachedNode> _allServers;
+        private ReaderWriterLockSlim _serverAccessLock;
 
         public DefaultNodeLocator() : this(1000)
         {
         }
 
+        public DefaultNodeLocator(int serverAddressMutations)
+        {
+            _servers = new Dictionary<ulong, IMemcachedNode>(new ULongEqualityComparer());
+            _deadServers = new Dictionary<IMemcachedNode, bool>();
+            _allServers = new List<IMemcachedNode>();
+            _serverAccessLock = new ReaderWriterLockSlim();
+            _serverAddressMutations = serverAddressMutations;
+        }
+
         private void BuildIndex(List<IMemcachedNode> nodes)
         {
-            var keys = new ulong[nodes.Count * serverAddressMutations];
+            var keys = new ulong[nodes.Count * _serverAddressMutations];
 
             int nodeIdx = 0;
 
             foreach (IMemcachedNode node in nodes)
             {
-                var tmpKeys = DefaultNodeLocator.GenerateKeys(node, serverAddressMutations);
+                var tmpKeys = DefaultNodeLocator.GenerateKeys(node, _serverAddressMutations);
 
                 for (var i = 0; i < tmpKeys.Length; i++)
                 {
@@ -40,7 +50,7 @@ namespace Enyim.Caching.Memcached
                 }
 
                 tmpKeys.CopyTo(keys, nodeIdx);
-                nodeIdx += serverAddressMutations;
+                nodeIdx += _serverAddressMutations;
             }
 
             Array.Sort<ulong>(keys);
@@ -53,7 +63,7 @@ namespace Enyim.Caching.Memcached
 
             try
             {
-                _allServers = [.. nodes];
+                _allServers = nodes.ToList();
                 BuildIndex(_allServers);
             }
             finally
@@ -64,7 +74,7 @@ namespace Enyim.Caching.Memcached
 
         IMemcachedNode IMemcachedNodeLocator.Locate(string key)
         {
-            ArgumentNullException.ThrowIfNull(key);
+            if (key == null) throw new ArgumentNullException("key");
 
             _serverAccessLock.EnterUpgradeableReadLock();
 

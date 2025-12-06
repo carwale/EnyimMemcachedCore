@@ -8,10 +8,17 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
     /// <summary>
     /// Implements append/prepend.
     /// </summary>
-    public class ConcatOperation(ConcatenationMode mode, string key, ArraySegment<byte> data) : BinarySingleItemOperation(key), IConcatOperation
+    public class ConcatOperation : BinarySingleItemOperation, IConcatOperation
     {
-        private readonly ArraySegment<byte> data = data;
-        private readonly ConcatenationMode mode = mode;
+        private readonly ArraySegment<byte> data;
+        private readonly ConcatenationMode mode;
+
+        public ConcatOperation(ConcatenationMode mode, string key, ArraySegment<byte> data)
+            : base(key)
+        {
+            this.data = data;
+            this.mode = mode;
+        }
 
         protected override BinaryRequest Build()
         {

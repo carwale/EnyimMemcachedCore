@@ -15,15 +15,24 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
     /// <summary>
     /// A node which is used by the BinaryPool. It implements the binary protocol's SASL auth. mechanism.
     /// </summary>
-    public class BinaryNode(
-        EndPoint endpoint,
-        ISocketPoolConfiguration config,
-        ISaslAuthenticationProvider authenticationProvider,
-        ILogger logger, IMetricFunctions metricFunctions) : MemcachedNode(endpoint, config, logger, metricFunctions)
+    public class BinaryNode : MemcachedNode
     {
-        private readonly ILogger _logger = logger;
-        private readonly IMetricFunctions _metricFunctions = metricFunctions;
-        readonly ISaslAuthenticationProvider authenticationProvider = authenticationProvider;
+        private readonly ILogger _logger;
+        private readonly IMetricFunctions _metricFunctions;
+        readonly ISaslAuthenticationProvider authenticationProvider;
+
+        public BinaryNode(
+            EndPoint endpoint,
+            ISocketPoolConfiguration config,
+            ISaslAuthenticationProvider authenticationProvider,
+            ILogger logger, IMetricFunctions metricFunctions)
+            : base(endpoint, config, logger, metricFunctions)
+        {
+            this.authenticationProvider = authenticationProvider;
+            _logger = logger;
+            _metricFunctions = metricFunctions;
+
+        }
 
         /// <summary>
         /// Authenticates the new socket before it is put into the pool.

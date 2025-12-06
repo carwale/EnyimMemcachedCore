@@ -7,9 +7,14 @@ using Enyim.Caching.Memcached.Results.Extensions;
 
 namespace Enyim.Caching.Memcached.Protocol.Binary
 {
-    public abstract class SaslStep(ISaslAuthenticationProvider provider) : BinaryOperation
+    public abstract class SaslStep : BinaryOperation
     {
-        protected ISaslAuthenticationProvider Provider { get; private set; } = provider;
+        protected SaslStep(ISaslAuthenticationProvider provider)
+        {
+            this.Provider = provider;
+        }
+
+        protected ISaslAuthenticationProvider Provider { get; private set; }
 
         protected internal override IOperationResult ReadResponse(PooledSocket socket)
         {

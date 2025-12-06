@@ -9,11 +9,16 @@ using Microsoft.Extensions.Logging;
 
 namespace Enyim.Caching
 {
-    public class MemcachedClient<T>(ILoggerFactory loggerFactory, IMemcachedClientConfiguration configuration) : IMemcachedClient<T>
+    public class MemcachedClient<T> : IMemcachedClient<T>
     {
-        private readonly IMemcachedClient _memcachedClient = new MemcachedClient(loggerFactory, configuration);
+        private readonly IMemcachedClient _memcachedClient;
 
         public event Action<IMemcachedNode> NodeFailed;
+
+        public MemcachedClient(ILoggerFactory loggerFactory, IMemcachedClientConfiguration configuration)
+        {
+            _memcachedClient = new MemcachedClient(loggerFactory, configuration);
+        }
 
         public bool Add(string key, object value, int cacheSeconds)
         {

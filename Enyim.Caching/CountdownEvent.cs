@@ -9,12 +9,18 @@ using System.Diagnostics;
 
 namespace Enyim.Caching
 {
-	public class CountdownEvent(int count) : IDisposable
+	public class CountdownEvent : IDisposable
 	{
-		private int count = count;
-		private ManualResetEvent mre = new(false);
+		private int count;
+		private ManualResetEvent mre;
 
-        public void Signal()
+		public CountdownEvent(int count)
+		{
+			this.count = count;
+			this.mre = new ManualResetEvent(false);
+		}
+
+		public void Signal()
 		{
 			if (this.count == 0) throw new InvalidOperationException("Counter underflow");
 

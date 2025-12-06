@@ -21,7 +21,7 @@ namespace Enyim.Caching.Configuration
 
         Dictionary<string, object> IAuthenticationConfiguration.Parameters
         {
-            get { return this.parameters ??= []; }
+            get { return this.parameters ?? (this.parameters = new Dictionary<string, object>()); }
         }
     }
 }

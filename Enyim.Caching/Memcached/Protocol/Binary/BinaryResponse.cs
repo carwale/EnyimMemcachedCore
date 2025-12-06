@@ -43,7 +43,8 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
         {
             return this.Data.Array == null
                     ? null
-                    : (this.responseMessage ??= Encoding.ASCII.GetString(this.Data.Array, this.Data.Offset, this.Data.Count));
+                    : (this.responseMessage
+                        ?? (this.responseMessage = Encoding.ASCII.GetString(this.Data.Array, this.Data.Offset, this.Data.Count)));
         }
 
         public unsafe bool Read(PooledSocket socket)
@@ -56,8 +57,9 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
             var header = new byte[HeaderLength];
             socket.Read(header, 0, header.Length);
 
+            int dataLength, extraLength;
 
-            DeserializeHeader(header, out int dataLength, out int extraLength);
+            DeserializeHeader(header, out dataLength, out extraLength);
 
             if (dataLength > 0)
             {
@@ -80,8 +82,9 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
             var header = new byte[HeaderLength];
             await socket.ReadAsync(header, 0, header.Length);
 
+            int dataLength, extraLength;
 
-            DeserializeHeader(header, out int dataLength, out int extraLength);
+            DeserializeHeader(header, out dataLength, out extraLength);
 
             if (dataLength > 0)
             {
@@ -115,7 +118,7 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
             }
         }
 
-        private static void LogExecutionTime(string title, DateTime startTime, int thresholdMs)
+        private void LogExecutionTime(string title, DateTime startTime, int thresholdMs)
         {
             var duration = (DateTime.Now - startTime).TotalMilliseconds;
             if (duration > thresholdMs)

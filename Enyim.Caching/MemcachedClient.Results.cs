@@ -25,9 +25,10 @@ namespace Enyim.Caching
 		public IStoreOperationResult ExecuteStore(StoreMode mode, string key, object value)
 		{
 			ulong tmp = 0;
+			int status;
 
-            return this.PerformStore(mode, key, value, 0, ref tmp, out int status);
-        }
+			return this.PerformStore(mode, key, value, 0, ref tmp, out status);
+		}
 
 		/// <summary>
 		/// Inserts an item into the cache with a cache key to reference its location.
@@ -40,9 +41,10 @@ namespace Enyim.Caching
 		public IStoreOperationResult ExecuteStore(StoreMode mode, string key, object value, TimeSpan validFor)
 		{
 			ulong tmp = 0;
+			int status;
 
-            return this.PerformStore(mode, key, value, MemcachedClient.GetExpiration(validFor, null), ref tmp, out int status);
-        }
+			return this.PerformStore(mode, key, value, MemcachedClient.GetExpiration(validFor, null), ref tmp, out status);
+		}
 
 		/// <summary>
 		/// Inserts an item into the cache with a cache key to reference its location.
@@ -55,9 +57,10 @@ namespace Enyim.Caching
 		public IStoreOperationResult ExecuteStore(StoreMode mode, string key, object value, DateTime expiresAt)
 		{
 			ulong tmp = 0;
+			int status;
 
-            return this.PerformStore(mode, key, value, MemcachedClient.GetExpiration(null, expiresAt), ref tmp, out int status);
-        }			
+			return this.PerformStore(mode, key, value, MemcachedClient.GetExpiration(null, expiresAt), ref tmp, out status);
+		}			
 		
 		#endregion
 
@@ -126,9 +129,10 @@ namespace Enyim.Caching
 		/// <returns>The retrieved item, or <value>null</value> if the key was not found.</returns>
 		public IGetOperationResult ExecuteGet(string key)
 		{
+			object tmp;
 
-            return this.ExecuteTryGet(key, out object tmp);
-        }
+			return this.ExecuteTryGet(key, out tmp);
+		}
 
 		/// <summary>
 		/// Tries to get an item from the cache.
@@ -138,8 +142,9 @@ namespace Enyim.Caching
 		/// <returns>The <value>true</value> if the item was successfully retrieved.</returns>
 		public IGetOperationResult ExecuteTryGet(string key, out object value)
 		{
-            ulong cas;
-            return this.PerformTryGet(key, out cas, out value);
+			ulong cas = 0;
+
+			return this.PerformTryGet(key, out cas, out value);
         }
 
         /// <summary>
@@ -150,7 +155,8 @@ namespace Enyim.Caching
         /// <returns>The <value>true</value> if the item was successfully retrieved.</returns>
         public IGetOperationResult ExecuteTryGet<T>(string key, out T value)
         {
-            ulong cas;
+            ulong cas = 0;
+
             return this.PerformTryGet(key, out cas, out value);
         }
 
@@ -161,9 +167,10 @@ namespace Enyim.Caching
         /// <returns>The retrieved item, or <value>default(T)</value> if the key was not found.</returns>
         public IGetOperationResult<T> ExecuteGet<T>(string key)
 		{
-            var result = new DefaultGetOperationResultFactory<T>().Create();
+            T tmp;
+			var result = new DefaultGetOperationResultFactory<T>().Create();
 
-            var tryGetResult = ExecuteTryGet(key, out T tmp);
+			var tryGetResult = ExecuteTryGet(key, out tmp);
 			if (tryGetResult.Success)
 			{
 				if (tryGetResult.Value is T)

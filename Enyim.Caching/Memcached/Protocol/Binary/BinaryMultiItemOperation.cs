@@ -3,8 +3,10 @@ using System.Collections.Generic;
 
 namespace Enyim.Caching.Memcached.Protocol.Binary
 {
-    public abstract class BinaryMultiItemOperation(IList<string> keys) : MultiItemOperation(keys)
+    public abstract class BinaryMultiItemOperation : MultiItemOperation
     {
+        public BinaryMultiItemOperation(IList<string> keys) : base(keys) { }
+
         protected abstract BinaryRequest Build(string key);
 
         protected internal override IList<ArraySegment<byte>> GetBuffer()
