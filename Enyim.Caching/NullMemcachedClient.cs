@@ -207,6 +207,11 @@ namespace Enyim.Caching
             return false;
         }
 
+        public async Task<bool> StoreAsync<T>(StoreMode mode, string key, T value, TimeSpan validFor)
+        {
+            return false;
+        }
+
         public async Task<bool> StoreAsync(StoreMode mode, string key, object value, DateTime expiresAt)
         {
             return false;

@@ -393,6 +393,11 @@ namespace Enyim.Caching
             return (await this.PerformStoreAsync(mode, key, value, MemcachedClient.GetExpiration(validFor, null))).Success;
         }
 
+        public Task<bool> StoreAsync<T>(StoreMode mode, string key, T value, TimeSpan validFor)
+        {
+            return this.PerformStoreAsync<T>(mode, key, value, MemcachedClient.GetExpiration(validFor, null));
+        }
+
         /// <summary>
         /// Inserts an item into the cache with a cache key to reference its location.
         /// </summary>
@@ -617,6 +622,74 @@ namespace Enyim.Caching
             # endif
             result.Fail("Unable to locate memcached node");
             return result;
+        }
+
+        protected async virtual Task<bool> PerformStoreAsync<T>(StoreMode mode, string key, T value, uint expires)
+        {
+            var hashedKey = this.keyTransformer.Transform(key);
+            var node = this.pool.Locate(hashedKey);
+            var result = StoreOperationResultFactory.Create();
+
+            #if NET6_0
+            using var activity = ActivitySourceHelper.StartActivity("PerformStoreAsync", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key),
+                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
+                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
+            });
+            # endif
+
+            int statusCode = -1;
+            ulong cas = 0;
+            
+            //Removed null check on value parameter, in order to allow storing null
+
+            if (node != null)
+            {
+                CacheItem item;
+
+                try 
+                { 
+                    item = this.transcoder.Serialize(value); 
+                    item.Data = ZSTDCompression.Compress(item.Data, _logger);
+                }
+                catch (Exception e)
+                {
+                    _logger.LogError(new EventId(), e, $"{nameof(PerformStoreAsync)} for '{key}' key");
+
+                    result.Fail("PerformStore failed", e);
+                    return result.Success;
+                }
+
+                var command = this.pool.OperationFactory.Store(mode, hashedKey, item, expires, cas);
+                var commandResult = await node.ExecuteAsync(command);
+
+                result.Cas = cas = command.CasValue;
+                result.StatusCode = statusCode = command.StatusCode;
+
+                if (commandResult.Success)
+                {
+                    #if NET6_0
+                activity.SetSuccess();
+            # endif
+                    result.Pass();
+                    return result.Success;
+                }
+
+                #if NET6_0
+                    activity.SetException(result.Exception);
+                    # endif
+                commandResult.Combine(result);
+                return result.Success;
+            }
+
+            //if (this.performanceMonitor != null) this.performanceMonitor.Store(mode, 1, false);
+
+            #if NET6_0
+            activity.SetException(new Exception("Unable to locate node"));
+            # endif
+            result.Fail("Unable to locate memcached node");
+            return result.Success;
         }
 
         #endregion

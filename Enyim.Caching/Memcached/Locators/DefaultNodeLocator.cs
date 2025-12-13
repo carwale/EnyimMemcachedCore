@@ -16,8 +16,8 @@ namespace Enyim.Caching.Memcached
         private ulong[] _keys;
         // used to lookup a server based on its key
         private Dictionary<ulong, IMemcachedNode> _servers = new(new ULongEqualityComparer());
-        private Dictionary<IMemcachedNode, bool> _deadServers = [];
-        private List<IMemcachedNode> _allServers = [];
+        private Dictionary<IMemcachedNode, bool> _deadServers = new();
+        private List<IMemcachedNode> _allServers = new();
         private ReaderWriterLockSlim _serverAccessLock = new();
 
         public DefaultNodeLocator() : this(1000)
