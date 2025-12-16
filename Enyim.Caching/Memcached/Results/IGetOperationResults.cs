@@ -7,6 +7,10 @@ namespace Enyim.Caching.Memcached.Results
 {
 	public interface IGetOperationResult : INullableOperationResult<object>, ICasOperationResult
 	{
+		/// <summary>
+		/// The flags returned from the server for this item.
+		/// </summary>
+		uint Flags { get; set; }
 	}
 }
 

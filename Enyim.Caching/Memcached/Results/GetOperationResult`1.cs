@@ -12,6 +12,8 @@ namespace Enyim.Caching.Memcached.Results
 		public T Value { get; set; }
 
 		public ulong Cas { get; set; }
+
+		public uint Flags { get; set; }
 	}
 }
 

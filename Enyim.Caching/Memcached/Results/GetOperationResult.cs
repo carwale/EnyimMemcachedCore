@@ -13,6 +13,8 @@ namespace Enyim.Caching.Memcached.Results
 
 		public object Value { get; set; }
 
+		public uint Flags { get; set; }
+
 	}
 }
 

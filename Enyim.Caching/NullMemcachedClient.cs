@@ -99,9 +99,19 @@ namespace Enyim.Caching
             return null;
         }
 
+        public CacheValue<object> GetCacheValue(string key)
+        {
+            return new CacheValue<object>(default, false);
+        }
+        
         public T Get<T>(string key)
         {
             return default(T);
+        }
+
+        public CacheValue<T> GetCacheValue<T>(string key)
+        {
+            return new CacheValue<T>(default, false);
         }
 
         public async Task<IGetOperationResult<T>> GetAsync<T>(string key)
@@ -115,6 +125,29 @@ namespace Enyim.Caching
         public async Task<T> GetValueAsync<T>(string key)
         {
             return default(T);
+        }
+
+        public async Task<IGetOperationResult<CacheValue<T>>> GetCacheValueAsync<T>(string key)
+        {
+            var result = new DefaultGetOperationResultFactory<CacheValue<T>>().Create();
+            result.Success = false;
+            result.Value = default(CacheValue<T>);
+            return result;
+        }
+
+        public async Task<CacheValue<T>> GetCacheValueValueAsync<T>(string key)
+        {
+            return default(CacheValue<T>);
+        }
+
+        public IDictionary<string, CacheValue<T>> GetCacheValue<T>(IEnumerable<string> keys)
+        {
+            return new Dictionary<string, CacheValue<T>>();
+        }
+
+        public Task<IDictionary<string, CacheValue<T>>> GetCacheValueAsync<T>(IEnumerable<string> keys)
+        {
+            return Task.FromResult<IDictionary<string, CacheValue<T>>>(new Dictionary<string, CacheValue<T>>());
         }
 
         public IDictionary<string, CasResult<object>> GetWithCas(IEnumerable<string> keys)
@@ -201,6 +234,10 @@ namespace Enyim.Caching
         {
             return false;
         }
+        public bool StoreCritical(StoreMode mode, string key, TimeSpan validFor)
+        {
+            return false;
+        }
 
         public async Task<bool> StoreAsync(StoreMode mode, string key, object value, TimeSpan validFor)
         {
@@ -211,6 +248,14 @@ namespace Enyim.Caching
         {
             return false;
         }
+        public Task<bool> StoreCriticalAsync<T>(StoreMode mode, string key, TimeSpan validFor)
+        {
+            return Task.FromResult<bool>(false);
+        }
+        public Task<bool> StoreCriticalAsync(StoreMode mode, string key, DateTime expiresAt)
+        {
+            return Task.FromResult<bool>(false);
+        }
 
         public bool Store(StoreMode mode, string key, object value, DateTime expiresAt)
         {
@@ -220,6 +265,12 @@ namespace Enyim.Caching
         public bool TryGet(string key, out object value)
         {
             value = null;
+            return false;
+        }
+        
+        public bool TryGetCacheValue(string key, out CacheValue<object> value)
+        {
+            value = new CacheValue<object>(default, false);
             return false;
         }
 

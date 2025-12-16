@@ -125,6 +125,13 @@ namespace Enyim.Caching
             return this.TryGet(key, out tmp) ? tmp : null;
         }
 
+        [Obsolete]
+        public CacheValue<object> GetCacheValue(string key)
+        {
+            CacheValue<object> tmp;
+            return this.TryGetCacheValue(key, out tmp) ? tmp : null;
+        }
+
         /// <summary>
         /// Retrieves the specified item from the cache.
         /// </summary>
@@ -145,16 +152,16 @@ namespace Enyim.Caching
 
                     if (commandResult.Success)
                     {
+                        var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
+                        uint flags = command.Result.Flags; // Capture flags before creating new CacheItem
+                        command.Result = new CacheItem(flags, decompressedBytes);
+                        
                         if (typeof(T).GetTypeCode() == TypeCode.Object && typeof(T) != typeof(Byte[]))
                         {
-                            var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
-                            command.Result = new CacheItem(command.Result.Flags, decompressedBytes);
                             return this.transcoder.Deserialize<T>(command.Result);
                         }
                         else
                         {
-                            var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
-                            command.Result = new CacheItem(command.Result.Flags, decompressedBytes);
                             var tempResult = this.transcoder.Deserialize(command.Result);
                             if (tempResult != null)
                             {
@@ -182,6 +189,63 @@ namespace Enyim.Caching
             }
 
             return default(T);
+        }
+
+        public CacheValue<T> GetCacheValue<T>(string key)
+        {
+            var hashedKey = this.keyTransformer.Transform(key);
+            var node = this.pool.Locate(hashedKey);
+
+            if (node != null)
+            {
+                try
+                {
+                    var command = this.pool.OperationFactory.Get(hashedKey);
+                    var commandResult = node.Execute(command);
+
+                    if (commandResult.Success)
+                    {
+                        uint flags = command.Result.Flags; // Capture flags before creating new CacheItem
+                        bool isCritical = CacheFlagHelper.IsCritical(flags);
+                        if (isCritical){
+                            return new CacheValue<T>(default, isCritical);
+                        }
+                        var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
+                        command.Result = new CacheItem(flags, decompressedBytes);
+                        
+                        if (typeof(T).GetTypeCode() == TypeCode.Object && typeof(T) != typeof(Byte[]))
+                        {
+                            return new CacheValue<T>(this.transcoder.Deserialize<T>(command.Result), isCritical);
+                        }
+                        else
+                        {
+                            var tempResult = this.transcoder.Deserialize(command.Result);
+                            if (tempResult != null)
+                            {
+                                if (typeof(T) == typeof(Guid))
+                                {
+                                    return new CacheValue<T>((T)(object)new Guid((string)tempResult), isCritical);
+                                }
+                                else
+                                {
+                                    return new CacheValue<T>((T)tempResult, isCritical);
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(0, ex, $"{nameof(GetCacheValue)}(\"{key}\")");
+                    throw ex;
+                }
+            }
+            else
+            {
+                _logger.LogError($"Unable to locate memcached node");
+            }
+
+            return new CacheValue<T>(default, false);
         }
 
         public async Task<IGetOperationResult<T>> GetAsync<T>(string key)
@@ -212,7 +276,9 @@ namespace Enyim.Caching
                     {                    
                         result.Success = true;
                         var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
-                        command.Result = new CacheItem(command.Result.Flags, decompressedBytes);
+                        uint flags = command.Result.Flags; // Capture flags before creating new CacheItem
+                        command.Result = new CacheItem(flags, decompressedBytes);
+                        result.Flags = flags; // Store flags in result
                         result.Value = transcoder.Deserialize<T>(command.Result);
                         #if NET6_0
                         activity.SetSuccess();
@@ -242,6 +308,81 @@ namespace Enyim.Caching
             return result;
         }
 
+        /// <summary>
+        /// Retrieves the specified item from the cache with critical flag information.
+        /// </summary>
+        /// <param name="key">The identifier for the item to retrieve.</param>
+        /// <returns>The retrieved item wrapped in CacheValue with critical flag, or default if the key was not found.</returns>
+        public async Task<IGetOperationResult<CacheValue<T>>> GetCacheValueAsync<T>(string key)
+        {
+            var result = new DefaultGetOperationResultFactory<CacheValue<T>>().Create();
+
+            var hashedKey = this.keyTransformer.Transform(key);
+            var node = this.pool.Locate(hashedKey);
+
+
+            #if NET6_0
+            using var activity = ActivitySourceHelper.StartActivity("GetCacheValueAsync", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key),
+                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
+                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
+            });
+            # endif
+
+            if (node != null)
+            {
+                try
+                {
+                    var command = this.pool.OperationFactory.Get(hashedKey);
+                    var commandResult = await node.ExecuteAsync(command);
+
+                    if (commandResult.Success)
+                    {
+                        result.Success = true;
+                        uint flags = command.Result.Flags; // Capture flags before creating new CacheItem
+                        result.Flags = flags; // Store flags in result
+                        bool isCritical = CacheFlagHelper.IsCritical(flags);
+                        if (isCritical){
+                            result.Value = new CacheValue<T>(default, true);
+                            #if NET6_0
+                            activity?.SetTag("cache.flag.isCritical", "true");
+                            activity.SetSuccess();
+                            # endif
+                            return result;
+                        }
+                        var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
+                        command.Result = new CacheItem(flags, decompressedBytes);
+                        var deserializedValue = transcoder.Deserialize<T>(command.Result);
+                        result.Value = new CacheValue<T>(deserializedValue, isCritical);
+                        #if NET6_0
+                        activity.SetSuccess();
+                        # endif
+                        return result;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    #if NET6_0
+                    activity.SetException(result.Exception);
+                    # endif
+                    _logger.LogError(0, ex, $"{nameof(GetCacheValueAsync)}(\"{key}\")");
+                    throw ex;
+                }
+            }
+            else
+            {
+                #if NET6_0
+                activity.SetException(new Exception("Unable to locate node"));
+                # endif
+                _logger.LogError($"Unable to locate memcached node");
+            }
+
+            result.Success = false;
+            result.Value = default;
+            return result;
+        }
+
         public async Task<T> GetValueAsync<T>(string key)
         {
             var result = await GetAsync<T>(key);
@@ -260,6 +401,12 @@ namespace Enyim.Caching
             ulong cas = 0;
 
             return this.PerformTryGet(key, out cas, out value).Success;
+        }
+
+        public bool TryGetCacheValue(string key, out CacheValue<object> value)
+        {
+            ulong cas = 0;
+            return this.PerformTryGetCacheValue(key, out cas, out value).Success;
         }
 
         [Obsolete]
@@ -319,8 +466,80 @@ namespace Enyim.Caching
                 if (commandResult.Success)
                 {
                     var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
-                    command.Result = new CacheItem(command.Result.Flags, decompressedBytes);
+                    uint flags = command.Result.Flags; // Capture flags before creating new CacheItem
+                    command.Result = new CacheItem(flags, decompressedBytes);
+                    result.Flags = flags; // Store flags in result
                     result.Value = value = this.transcoder.Deserialize(command.Result);
+                    result.Cas = cas = command.CasValue;
+
+                    #if NET6_0
+                    activity.SetSuccess();
+                    # endif
+                    result.Pass();
+                    return result;
+                }
+                else
+                {
+                    #if NET6_0
+                    activity.SetException(result.Exception);
+                    # endif
+                    commandResult.Combine(result);
+                    return result;
+                }
+            }
+
+            result.Value = value;
+            result.Cas = cas;
+            #if NET6_0
+            activity.SetException(new Exception("Unable to locate node"));
+            # endif
+            result.Fail("Unable to locate node");
+            return result;
+        }
+
+        protected virtual IGetOperationResult<CacheValue<object>> PerformTryGetCacheValue(string key, out ulong cas, out CacheValue<object> value)
+        {
+            var hashedKey = this.keyTransformer.Transform(key);
+            var node = this.pool.Locate(hashedKey);
+            var result = new DefaultGetOperationResultFactory<CacheValue<object>>().Create();
+
+            #if NET6_0
+            using var activity = ActivitySourceHelper.StartActivity("PerformTryGetCacheValue", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key),
+                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
+                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
+            });
+            # endif
+
+            _logger.LogInformation($"Inside PerformTryGet");
+
+            cas = 0;
+            value = null;
+
+            if (node != null)
+            {
+                var command = this.pool.OperationFactory.Get(hashedKey);
+                var commandResult = node.Execute(command);
+
+                if (commandResult.Success)
+                {
+                    uint flags = command.Result.Flags; // Capture flags before creating new CacheItem
+                    bool isCritical = CacheFlagHelper.IsCritical(flags);
+                    if (isCritical){
+                        result.Value = new CacheValue<object>(default, isCritical);
+                        result.Flags = flags;
+                        #if NET6_0
+                        activity?.SetTag("cache.flag.isCritical", "true");
+                        activity.SetSuccess();
+                        # endif
+                        result.Pass();
+                        return result;
+                    }
+                    var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
+                    command.Result = new CacheItem(flags, decompressedBytes);
+                    result.Flags = flags; // Store flags in result
+                    result.Value = value = new CacheValue<object>(this.transcoder.Deserialize(command.Result), isCritical);
                     result.Cas = cas = command.CasValue;
 
                     #if NET6_0
@@ -383,6 +602,12 @@ namespace Enyim.Caching
             return this.PerformStore(mode, key, value, MemcachedClient.GetExpiration(validFor, null), ref tmp, out status).Success;
         }
 
+        public bool StoreCritical(StoreMode mode, string key, TimeSpan validFor){
+            ulong tmp = 0;
+            int status;
+            return this.PerformStoreWithFlags(mode, key, default(object), GetExpiration(validFor, null), CacheFlags.IsCritical, ref tmp, out status).Success;
+        }
+
         public async Task<bool> StoreAsync(StoreMode mode, string key, object value, DateTime expiresAt)
         {
             return (await this.PerformStoreAsync(mode, key, value, MemcachedClient.GetExpiration(null, expiresAt))).Success;
@@ -391,6 +616,56 @@ namespace Enyim.Caching
         public async Task<bool> StoreAsync(StoreMode mode, string key, object value, TimeSpan validFor)
         {
             return (await this.PerformStoreAsync(mode, key, value, MemcachedClient.GetExpiration(validFor, null))).Success;
+        }
+
+        /// <summary>
+        /// Inserts an item into the cache with a cache key to reference its location and optional critical flag.
+        /// </summary>
+        /// <param name="mode">Defines how the item is stored in the cache.</param>
+        /// <param name="key">The key used to reference the item.</param>
+        /// <param name="value">The object to be inserted into the cache.</param>
+        /// <param name="validFor">The interval after the item is invalidated in the cache.</param>
+        /// <param name="isCritical">If true, sets the critical flag on the item.</param>
+        /// <returns>true if the item was successfully stored in the cache; false otherwise.</returns>
+        public Task<bool> StoreCriticalAsync(StoreMode mode, string key, TimeSpan validFor, bool isCritical)
+        {
+            CacheFlags cacheFlags = CacheFlags.None;
+            if (isCritical){
+                cacheFlags |= CacheFlags.IsCritical;
+            }
+            return PerformStoreWithFlagsAsync(mode, key, default(object), GetExpiration(validFor, null), cacheFlags);
+        }
+
+        /// <summary>
+        /// Inserts an item into the cache with a cache key to reference its location and optional critical flag.
+        /// </summary>
+        /// <param name="mode">Defines how the item is stored in the cache.</param>
+        /// <param name="key">The key used to reference the item.</param>
+        /// <param name="value">The object to be inserted into the cache.</param>
+        /// <param name="expiresAt">The time when the item is invalidated in the cache.</param>
+        /// <param name="isCritical">If true, sets the critical flag on the item.</param>
+        /// <returns>true if the item was successfully stored in the cache; false otherwise.</returns>
+        public Task<bool> StoreCriticalAsync(StoreMode mode, string key, DateTime expiresAt)
+        {
+            CacheFlags cacheFlags = CacheFlags.None;
+            cacheFlags |= CacheFlags.IsCritical;
+            return PerformStoreWithFlagsAsync(mode, key, default(object), GetExpiration(null, expiresAt), cacheFlags);
+        }
+
+        /// <summary>
+        /// Inserts an item into the cache with a cache key to reference its location and optional critical flag.
+        /// </summary>
+        /// <param name="mode">Defines how the item is stored in the cache.</param>
+        /// <param name="key">The key used to reference the item.</param>
+        /// <param name="value">The object to be inserted into the cache.</param>
+        /// <param name="validFor">The interval after the item is invalidated in the cache.</param>
+        /// <param name="isCritical">If true, sets the critical flag on the item.</param>
+        /// <returns>true if the item was successfully stored in the cache; false otherwise.</returns>
+        public Task<bool> StoreCriticalAsync<T>(StoreMode mode, string key, TimeSpan validFor)
+        {
+            CacheFlags cacheFlags = CacheFlags.None;
+            cacheFlags |= CacheFlags.IsCritical;
+            return PerformStoreWithFlagsAsync<T>(mode, key, default, GetExpiration(validFor, null), cacheFlags);
         }
 
         /// <summary>
@@ -551,6 +826,80 @@ namespace Enyim.Caching
             return result;
         }
 
+        protected virtual IStoreOperationResult PerformStoreWithFlags(StoreMode mode, string key, object value, uint expires, CacheFlags cacheFlags, ref ulong cas, out int statusCode)
+        {
+            var hashedKey = this.keyTransformer.Transform(key);
+            var node = this.pool.Locate(hashedKey);
+            var result = StoreOperationResultFactory.Create();
+
+
+            #if NET6_0
+            using var activity = ActivitySourceHelper.StartActivity("PerformCriticalStore", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key),
+                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
+                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
+            });
+            # endif
+
+            statusCode = -1;
+
+            //Removed null check on value parameter, in order to allow storing null
+
+            if (node != null)
+            {
+                CacheItem item;
+
+                try 
+                { 
+                    if (CacheFlagHelper.IsCritical(cacheFlags)){
+                        item = new CacheItem((uint)CacheFlags.IsCritical, new ArraySegment<byte>(new byte[0]));
+                    }
+                    else{
+                        item = this.transcoder.Serialize(value); 
+                    }
+                    item.Data = ZSTDCompression.Compress(item.Data, _logger);
+                }
+                catch (Exception e)
+                {
+                    _logger.LogError("PerformStoreWithFlags", e);
+
+                    result.Fail("PerformStoreWithFlags failed", e);
+                    return result;
+                }
+
+                var command = this.pool.OperationFactory.Store(mode, hashedKey, item, expires, cas);
+                var commandResult = node.Execute(command);
+
+                result.Cas = cas = command.CasValue;
+                result.StatusCode = statusCode = command.StatusCode;
+
+                if (commandResult.Success)
+                {
+                    #if NET6_0
+                    activity?.SetTag("cache.flag.isCritical", "true");
+                    activity.SetSuccess();
+            # endif
+                    result.Pass();
+                    return result;
+                }
+
+                #if NET6_0
+                    activity.SetException(result.Exception);
+                    # endif
+                commandResult.Combine(result);
+                return result;
+            }
+
+            //if (this.performanceMonitor != null) this.performanceMonitor.Store(mode, 1, false);
+
+            #if NET6_0
+            activity.SetException(new Exception("Unable to locate node"));
+            # endif
+            result.Fail("Unable to locate node");
+            return result;
+        }
+
         protected async virtual Task<IStoreOperationResult> PerformStoreAsync(StoreMode mode, string key, object value, uint expires)
         {
             var hashedKey = this.keyTransformer.Transform(key);
@@ -577,7 +926,7 @@ namespace Enyim.Caching
 
                 try 
                 { 
-                    item = this.transcoder.Serialize(value); 
+                    item = this.transcoder.Serialize(value);
                     item.Data = ZSTDCompression.Compress(item.Data, _logger);
                 }
                 catch (Exception e)
@@ -617,6 +966,81 @@ namespace Enyim.Caching
             # endif
             result.Fail("Unable to locate memcached node");
             return result;
+        }
+
+        protected async virtual Task<bool> PerformStoreWithFlagsAsync<T>(StoreMode mode, string key, T value, uint expires, CacheFlags cacheFlags)
+        {
+            var hashedKey = this.keyTransformer.Transform(key);
+            var node = this.pool.Locate(hashedKey);
+            var result = StoreOperationResultFactory.Create();
+
+            #if NET6_0
+            using var activity = ActivitySourceHelper.StartActivity("PerformStoreWithFlagsAsync", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key),
+                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
+                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
+            });
+            # endif
+
+            int statusCode = -1;
+            ulong cas = 0;
+
+            if (node != null)
+            {
+                CacheItem item;
+
+                try
+                {
+                    // Check if IsCritical flag is set
+                    if (CacheFlagHelper.IsCritical(cacheFlags))
+                    {
+                        // For critical items: set only IsCritical flag (not IsSerialized or IsCompressed), store empty byte array, skip serialization/compression
+                        item = new CacheItem((uint)CacheFlags.IsCritical, new ArraySegment<byte>(new byte[0]));
+                    }
+                    else
+                    {
+                        // Normal processing for non-critical items
+                        item = this.transcoder.Serialize(value);    
+                        // Always compress (existing behavior)
+                        item.Data = ZSTDCompression.Compress(item.Data, _logger);
+                    }
+                }
+                catch (Exception e)
+                {
+                    _logger.LogError(new EventId(), e, $"{nameof(PerformStoreWithFlagsAsync)} for '{key}' key");
+
+                    result.Fail("PerformStoreWithFlags failed", e);
+                    return result.Success;
+                }
+
+                var command = this.pool.OperationFactory.Store(mode, hashedKey, item, expires, cas);
+                var commandResult = await node.ExecuteAsync(command);
+
+                result.Cas = cas = command.CasValue;
+                result.StatusCode = statusCode = command.StatusCode;
+
+                if (commandResult.Success)
+                {
+                    #if NET6_0
+                    activity.SetSuccess();
+                    # endif
+                    result.Pass();
+                    return result.Success;
+                }
+
+                #if NET6_0
+                activity.SetException(result.Exception);
+                # endif
+                commandResult.Combine(result);
+                return result.Success;
+            }
+
+            #if NET6_0
+            activity.SetException(new Exception("Unable to locate node"));
+            # endif
+            result.Fail("Unable to locate memcached node");
+            return result.Success;
         }
 
         #endregion
@@ -1067,27 +1491,78 @@ namespace Enyim.Caching
             return PerformMultiGet<T>(keys, (mget, kvp) =>
             {
                 var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
-                var decompressedCacheItem = new CacheItem(kvp.Value.Flags, decompressedBytes);
+                uint flags = kvp.Value.Flags; // Capture flags
+                var decompressedCacheItem = new CacheItem(flags, decompressedBytes);
                 return this.transcoder.Deserialize<T>(decompressedCacheItem);
             });
         }
 
+        /// <summary>
+        /// Retrieves multiple items from the cache asynchronously.
+        /// </summary>
+        /// <param name="keys">The list of identifiers for the items to retrieve.</param>
+        /// <returns>a Dictionary holding all items indexed by their key.</returns>
         public async Task<IDictionary<string, T>> GetAsync<T>(IEnumerable<string> keys)
         {
             return await PerformMultiGetAsync<T>(keys, (mget, kvp) =>
             {
                 var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
-                var decompressedCacheItem = new CacheItem(kvp.Value.Flags, decompressedBytes);
+                uint flags = kvp.Value.Flags; // Capture flags
+                var decompressedCacheItem = new CacheItem(flags, decompressedBytes);
                 return this.transcoder.Deserialize<T>(decompressedCacheItem);
             });
         }
+
+        /// <summary>
+        /// Retrieves multiple items from the cache with critical flag information.
+        /// </summary>
+        /// <param name="keys">The list of identifiers for the items to retrieve.</param>
+        /// <returns>a Dictionary holding all items indexed by their key, wrapped in CacheValue.</returns>
+        public IDictionary<string, CacheValue<T>> GetCacheValue<T>(IEnumerable<string> keys)
+        {
+            return PerformMultiGet<CacheValue<T>>(keys, (mget, kvp) =>
+            {
+                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
+                uint flags = kvp.Value.Flags; // Capture flags
+                bool isCritical = CacheFlagHelper.IsCritical(flags);
+                if (isCritical){
+                    return new CacheValue<T>(default, true);
+                }
+                var decompressedCacheItem = new CacheItem(flags, decompressedBytes);
+                var deserializedValue = this.transcoder.Deserialize<T>(decompressedCacheItem);
+                return new CacheValue<T>(deserializedValue, isCritical);
+            });
+        }
+
+        /// <summary>
+        /// Retrieves multiple items from the cache asynchronously with critical flag information.
+        /// </summary>
+        /// <param name="keys">The list of identifiers for the items to retrieve.</param>
+        /// <returns>a Dictionary holding all items indexed by their key, wrapped in CacheValue.</returns>
+        public async Task<IDictionary<string, CacheValue<T>>> GetCacheValueAsync<T>(IEnumerable<string> keys)
+        {
+            return await PerformMultiGetAsync<CacheValue<T>>(keys, (mget, kvp) =>
+            {
+                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
+                uint flags = kvp.Value.Flags; // Capture flags
+                bool isCritical = CacheFlagHelper.IsCritical(flags);
+                if (isCritical){
+                    return new CacheValue<T>(default, true);
+                }
+                var decompressedCacheItem = new CacheItem(flags, decompressedBytes);
+                var deserializedValue = this.transcoder.Deserialize<T>(decompressedCacheItem);
+                return new CacheValue<T>(deserializedValue, isCritical);
+            });
+        }
+
 
         public IDictionary<string, CasResult<object>> GetWithCas(IEnumerable<string> keys)
         {
             return PerformMultiGet<CasResult<object>>(keys, (mget, kvp) => 
             {
                 var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
-                var decompressedCacheItem = new CacheItem(kvp.Value.Flags, decompressedBytes);
+                uint flags = kvp.Value.Flags; // Capture flags
+                var decompressedCacheItem = new CacheItem(flags, decompressedBytes);
                 return new CasResult<object>
                 {
                     Result = this.transcoder.Deserialize(decompressedCacheItem),
