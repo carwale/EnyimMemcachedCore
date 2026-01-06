@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <Description>CWMemcache is a Memcached client library for .NET Core. Usage: Add services.AddEnyimMemcached(...) and app.UseEnyimMemcached() in Startup. Add IMemcachedClient into constructor.</Description>
-    <VersionPrefix>3.2.1-alpha.1</VersionPrefix>
+    <VersionPrefix>3.2.1-alpha.2</VersionPrefix>
     <TargetFrameworks>net6.0</TargetFrameworks>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>CWMemcache</AssemblyName>
@@ -11,9 +11,10 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <LangVersion>latest</LangVersion>
     <PackageReleaseNotes>
-      3.2.1-alpha.1
-      Added tag for keys count in multi get operations
-      Removed lock and Task.Run in multi get async operation
+      3.2.1
+      i. Added tag for keys count in multi get operations
+      ii. Removed lock and Task.Run in multi get async operation
+      iii. Maintain stacktrace from GetAsync function
       ----------
       3.2.0
       Revert Enyim cache PR which was consuming more cpu

@@ -226,7 +226,7 @@ namespace Enyim.Caching
                     activity.SetException(result.Exception);
                     # endif
                     _logger.LogError(0, ex, $"{nameof(GetAsync)}(\"{key}\")");
-                    throw ex;
+                    throw;
                 }
             }
             else
