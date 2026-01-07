@@ -22,9 +22,6 @@
       3.1.0
       Add Compression and Decompression for every objects
       ----------
-      3.1.0
-      Add Compression and Decompression for every objects
-      ----------
       3.0.0
       Add connection idle timeoout
       Add Gauge Metric for Active Connections
