@@ -226,7 +226,7 @@ namespace Enyim.Caching
                     activity.SetException(result.Exception);
                     # endif
                     _logger.LogError(0, ex, $"{nameof(GetAsync)}(\"{key}\")");
-                    throw ex;
+                    throw;
                 }
             }
             else
@@ -1101,6 +1101,7 @@ namespace Enyim.Caching
             // the mget results will be mapped using this index
             #if NET6_0
             using var activity = ActivitySourceHelper.StartActivity("PerformMultiGet");
+            activity?.SetTag("cache.multiget.keys.count", keys.Count());
             # endif
             var hashed = new Dictionary<string, string>();
             foreach (var key in keys) hashed[this.keyTransformer.Transform(key)] = key;
@@ -1175,6 +1176,7 @@ namespace Enyim.Caching
             // the mget results will be mapped using this index
             #if NET6_0
             using var activity = ActivitySourceHelper.StartActivity("PerformMultiGetAsync");
+            activity?.SetTag("cache.multiget.keys.count", keys.Count());
             # endif
             var hashed = new Dictionary<string, string>();
             foreach (var key in keys)
@@ -1185,10 +1187,7 @@ namespace Enyim.Caching
             var byServer = GroupByServer(hashed.Keys);
 
             var retval = new Dictionary<string, T>(hashed.Count);
-            var tasks = new List<Task>();
-
-            //execute each list of keys on their respective node
-            foreach (var slice in byServer)
+            var tasks = byServer.Select(async slice =>
             {
                 var node = slice.Key;
                 #if NET6_0
@@ -1196,26 +1195,32 @@ namespace Enyim.Caching
                 # endif
                 var nodeKeys = slice.Value;
                 var mget = this.pool.OperationFactory.MultiGet(nodeKeys);
-                var task = Task.Run(async () =>
+                if ((await node.ExecuteAsync(mget)).Success)
                 {
-                    if ((await node.ExecuteAsync(mget)).Success)
+                    Dictionary<string, T> localRetval = new(mget.Result.Count);
+                    foreach (var kvp in mget.Result)
                     {
-                        foreach (var kvp in mget.Result)
+                        if (hashed.TryGetValue(kvp.Key, out var original))
                         {
-                            if (hashed.TryGetValue(kvp.Key, out var original))
-                            {
-                                lock (retval) retval[original] = collector(mget, kvp);
-                            }
+                            localRetval[original] = collector(mget, kvp);
                         }
                     }
-                });
-                tasks.Add(task);
-            }
+                    return localRetval;
+                }
+                return new Dictionary<string, T>();
+            });
 
-            await Task.WhenAll(tasks);
+            var results = await Task.WhenAll(tasks);
+            foreach (var result in results)
+            {
+                foreach (var kvp in result)
+                {
+                    retval[kvp.Key] = kvp.Value;
+                }
+            }
             #if NET6_0
                 activity.SetSuccess();
-                # endif
+            # endif
             return retval;
         }
 
