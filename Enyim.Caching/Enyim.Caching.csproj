@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <Description>CWMemcache is a Memcached client library for .NET Core. Usage: Add services.AddEnyimMemcached(...) and app.UseEnyimMemcached() in Startup. Add IMemcachedClient into constructor.</Description>
-    <VersionPrefix>3.2.1</VersionPrefix>
+    <VersionPrefix>3.3.0-alpha.1</VersionPrefix>
     <TargetFrameworks>net6.0</TargetFrameworks>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>CWMemcache</AssemblyName>
@@ -11,6 +11,9 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <LangVersion>latest</LangVersion>
     <PackageReleaseNotes>
+      3.3.0
+      Added CacheValue enum and new functions to handle critical flag information
+      ----------
       3.2.1
       i. Added tag for keys count in multi get operations
       ii. Removed lock and Task.Run in multi get async operation
