@@ -22,6 +22,8 @@ namespace Enyim.Caching.Memcached
 		object Deserialize(CacheItem item);
 
         T Deserialize<T>(CacheItem item);
+
+		CacheItem Serialize<T>(T value);
     }
 }
 

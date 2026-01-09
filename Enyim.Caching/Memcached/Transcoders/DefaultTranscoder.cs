@@ -18,6 +18,11 @@ namespace Enyim.Caching.Memcached
         public const uint RawDataFlag = 0xfa52;
         private static readonly ArraySegment<byte> NullArray = new ArraySegment<byte>(new byte[0]);
 
+        CacheItem ITranscoder.Serialize<T>(T value)
+        {
+            return this.Serialize(value);
+        }
+
         CacheItem ITranscoder.Serialize(object value)
         {
             return this.Serialize(value);
