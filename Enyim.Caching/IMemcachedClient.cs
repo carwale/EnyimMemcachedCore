@@ -17,11 +17,19 @@ namespace Enyim.Caching
         Task<IGetOperationResult<T>> GetAsync<T>(string key);
         Task<T> GetValueAsync<T>(string key);
         object Get(string key);
+		CacheValue<object> GetCacheValue(string key);
 		T Get<T>(string key);
+		CacheValue<T> GetCacheValue<T>(string key);
 		IDictionary<string, T> Get<T>(IEnumerable<string> keys);
         Task<IDictionary<string, T>> GetAsync<T>(IEnumerable<string> keys);
 
+        // Methods that return CacheValue<T> with critical flag information
+        Task<IGetOperationResult<CacheValue<T>>> GetCacheValueAsync<T>(string key);
+        IDictionary<string, CacheValue<T>> GetCacheValue<T>(IEnumerable<string> keys);
+        Task<IDictionary<string, CacheValue<T>>> GetCacheValueAsync<T>(IEnumerable<string> keys);
+
         bool TryGet(string key, out object value);
+		bool TryGetCacheValue(string key, out CacheValue<object> value);
 		bool TryGetWithCas(string key, out CasResult<object> value);
 
 		CasResult<object> GetWithCas(string key);
@@ -37,9 +45,12 @@ namespace Enyim.Caching
 		bool Store(StoreMode mode, string key, object value);
 		bool Store(StoreMode mode, string key, object value, DateTime expiresAt);
 		bool Store(StoreMode mode, string key, object value, TimeSpan validFor);
+		bool StoreCritical(StoreMode mode, string key, TimeSpan validFor);
         Task<bool> StoreAsync(StoreMode mode, string key, object value, DateTime expiresAt);
         Task<bool> StoreAsync(StoreMode mode, string key, object value, TimeSpan validFor);
 
+		public Task<bool> StoreCriticalAsync<T>(StoreMode mode, string key, TimeSpan validFor);
+		public Task<bool> StoreCriticalAsync(StoreMode mode, string key, DateTime expiresAt);
         CasResult<bool> Cas(StoreMode mode, string key, object value);
 		CasResult<bool> Cas(StoreMode mode, string key, object value, ulong cas);
 		CasResult<bool> Cas(StoreMode mode, string key, object value, DateTime expiresAt, ulong cas);
