@@ -257,7 +257,7 @@ namespace Enyim.Caching
 
 
             #if NET6_0
-            using var activity = ActivitySourceHelper.StartActivity("PerformTryGet", new[]
+            using var activity = ActivitySourceHelper.StartActivity("GetAsync", new[]
             {
                 new KeyValuePair<string, object?>("net.peer.query.key", key),
                 new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
@@ -834,7 +834,7 @@ namespace Enyim.Caching
 
 
             #if NET6_0
-            using var activity = ActivitySourceHelper.StartActivity("PerformCriticalStore", new[]
+            using var activity = ActivitySourceHelper.StartActivity("PerformStoreWithFlags", new[]
             {
                 new KeyValuePair<string, object?>("net.peer.query.key", key),
                 new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
