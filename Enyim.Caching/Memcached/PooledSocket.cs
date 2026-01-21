@@ -225,10 +225,6 @@ namespace Enyim.Caching.Memcached
 
         public async Task<byte[]> ReadBytesAsync(int count)
         {
-            this.CheckDisposed();
-
-            if (!this.IsAlive)
-                throw new InvalidOperationException("Socket is not alive");
 
             using (var awaitable = new SocketAwaitable())
             {
@@ -315,11 +311,6 @@ namespace Enyim.Caching.Memcached
 
         public async Task WriteAsync(IList<ArraySegment<byte>> buffers)
         {
-            this.CheckDisposed();
-
-            if (!this.IsAlive)
-                throw new InvalidOperationException("Socket is not alive");
-
             using (var awaitable = new SocketAwaitable())
             {
                 awaitable.Arguments.BufferList = buffers;

@@ -16,7 +16,7 @@
       ii. Fixed incorrect function name in ActivitySource.
       ----------
       3.3.0
-      Added ActivitySource for tracing
+      Added CacheValue enum and new functions to handle critical flag information
       ----------
       3.2.1
       i. Added tag for keys count in multi get operations
