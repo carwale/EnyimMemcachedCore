@@ -19,14 +19,6 @@ namespace Enyim.Caching.Memcached
     [DebuggerDisplay("[ Address: {endpoint}, IsAlive = {IsAlive} ]")]
     public partial class PooledSocket : IDisposable
     {
-        /// <summary>
-        /// Feature flag to enable modern .NET 6.0 native socket APIs.
-        /// Set USE_MODERN_SOCKET environment variable to "true" or "1" to enable.
-        /// Cached at startup for performance.
-        /// </summary>
-        private static readonly bool UseModernSocket = 
-            bool.TryParse(Environment.GetEnvironmentVariable("USE_MODERN_SOCKET"), out var value) && value;
-
         private readonly ILogger _logger;
 
         private bool isAlive;
@@ -60,15 +52,7 @@ namespace Enyim.Caching.Memcached
             socket.SendTimeout = rcv;
             socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
 
-            // Use async connection when modern socket is enabled, otherwise use legacy blocking approach
-            if (UseModernSocket)
-            {
-                ConnectWithTimeoutAsync(socket, endpoint, timeout, CancellationToken.None).GetAwaiter().GetResult();
-            }
-            else
-            {
-                ConnectWithTimeoutLegacy(socket, endpoint, timeout);
-            }
+            ConnectWithTimeout(socket, endpoint, timeout);
 
             this.socket = socket;
             this.endpoint = endpoint;
@@ -76,57 +60,7 @@ namespace Enyim.Caching.Memcached
             this.inputStream = new BasicNetworkStream(socket);            
         }
 
-        private async Task ConnectWithTimeoutAsync(Socket socket, EndPoint endpoint, int timeout, CancellationToken cancellationToken)
-        {
-            // Resolve DNS endpoint if needed (non-Windows platforms)
-            if (endpoint is DnsEndPoint && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                var dnsEndPoint = ((DnsEndPoint)endpoint);
-                var host = dnsEndPoint.Host;
-                var addresses = await Dns.GetHostAddressesAsync(dnsEndPoint.Host, cancellationToken).ConfigureAwait(false);
-                var address = addresses.FirstOrDefault(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
-                if (address == null)
-                {
-                    throw new ArgumentException(String.Format("Could not resolve host '{0}'.", host));
-                }
-                _logger.LogDebug($"Resolved '{host}' to '{address}'");
-                endpoint = new IPEndPoint(address, dnsEndPoint.Port);
-            }
-
-            // Use CancellationTokenSource for timeout handling
-            using (var cts = timeout == Timeout.Infinite 
-                ? new CancellationTokenSource() 
-                : new CancellationTokenSource(timeout))
-            {
-                using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, cancellationToken))
-                {
-                    try
-                    {
-                        await socket.ConnectAsync(endpoint, linkedCts.Token).ConfigureAwait(false);
-                        
-                        if (!socket.Connected)
-                        {
-                            socket.Dispose();
-                            throw new TimeoutException("Could not connect to " + endpoint);
-                        }
-
-                        LastConnectionTimestamp = DateTime.UtcNow;
-                    }
-                    catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
-                    {
-                        socket.Dispose();
-                        throw new TimeoutException("Could not connect to " + endpoint + " within " + timeout + "ms");
-                    }
-                    catch (SocketException ex)
-                    {
-                        socket.Dispose();
-                        throw new IOException($"Failed to connect to {endpoint}: {ex.SocketErrorCode}", ex);
-                    }
-                }
-            }
-        }
-
-        private void ConnectWithTimeoutLegacy(Socket socket, EndPoint endpoint, int timeout)
+        private void ConnectWithTimeout(Socket socket, EndPoint endpoint, int timeout)
         {
             // Resolve DNS endpoint if needed (non-Windows platforms)
             if (endpoint is DnsEndPoint && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -296,46 +230,11 @@ namespace Enyim.Caching.Memcached
             if (!this.IsAlive)
                 throw new InvalidOperationException("Socket is not alive");
 
-            if (UseModernSocket)
+            using (var awaitable = new SocketAwaitable())
             {
-                // Modern .NET 6.0 native socket API path
-                var buffer = new byte[count];
-                int totalRead = 0;
-
-                while (totalRead < count)
-                {
-                    try
-                    {
-                        var memory = new Memory<byte>(buffer, totalRead, count - totalRead);
-                        var bytesRead = await this.socket.ReceiveAsync(memory, SocketFlags.None, CancellationToken.None)
-                            .ConfigureAwait(false);
-
-                        if (bytesRead == 0)
-                        {
-                            this.isAlive = false;
-                            throw new IOException("Socket connection closed unexpectedly");
-                        }
-
-                        totalRead += bytesRead;
-                    }
-                    catch (SocketException ex)
-                    {
-                        this.isAlive = false;
-                        throw new IOException($"Socket error: {ex.SocketErrorCode}", ex);
-                    }
-                }
-
-                return buffer;
-            }
-            else
-            {
-                // Legacy SocketAwaitable path
-                using (var awaitable = new SocketAwaitable())
-                {
-                    awaitable.Buffer = new ArraySegment<byte>(new byte[count], 0, count);
-                    await this.socket.ReceiveAsync(awaitable);
-                    return awaitable.Transferred.Array;
-                }
+                awaitable.Buffer = new ArraySegment<byte>(new byte[count], 0, count);
+                await this.socket.ReceiveAsync(awaitable);
+                return awaitable.Transferred.Array;
             }
         }
 
@@ -414,89 +313,32 @@ namespace Enyim.Caching.Memcached
             }
         }
 
-        /// <summary>
-        /// Writes data to the socket asynchronously using modern .NET 6.0 native APIs or legacy SocketAwaitable.
-        /// </summary>
-        public async Task WriteAsync(IList<ArraySegment<byte>> buffers, CancellationToken cancellationToken = default)
+        public async Task WriteAsync(IList<ArraySegment<byte>> buffers)
         {
             this.CheckDisposed();
 
             if (!this.IsAlive)
                 throw new InvalidOperationException("Socket is not alive");
 
-            if (UseModernSocket)
+            using (var awaitable = new SocketAwaitable())
             {
-                // Modern .NET 6.0 native socket API path
+                awaitable.Arguments.BufferList = buffers;
                 try
                 {
-                    // Convert ArraySegment<byte> list to Memory<byte> segments and send each
-                    foreach (var segment in buffers)
-                    {
-                        if (segment.Array != null && segment.Count > 0)
-                        {
-                            var memory = new Memory<byte>(segment.Array, segment.Offset, segment.Count);
-                            int totalSent = 0;
-
-                            while (totalSent < memory.Length)
-                            {
-                                var remaining = memory.Slice(totalSent);
-                                var bytesSent = await this.socket.SendAsync(remaining, SocketFlags.None, cancellationToken)
-                                    .ConfigureAwait(false);
-
-                                if (bytesSent == 0)
-                                {
-                                    this.isAlive = false;
-                                    ThrowHelper.ThrowSocketWriteError(this.endpoint, SocketError.ConnectionReset);
-                                }
-
-                                totalSent += bytesSent;
-                            }
-                        }
-                    }
+                    await this.socket.SendAsync(awaitable);
                 }
-                catch (SocketException ex)
+                catch
                 {
                     this.isAlive = false;
-                    ThrowHelper.ThrowSocketWriteError(this.endpoint, ex.SocketErrorCode);
+                    ThrowHelper.ThrowSocketWriteError(this.endpoint, awaitable.Arguments.SocketError);
                 }
-                catch (OperationCanceledException)
+
+                if (awaitable.Arguments.SocketError != SocketError.Success)
                 {
                     this.isAlive = false;
-                    ThrowHelper.ThrowSocketWriteError(this.endpoint, SocketError.TimedOut);
+                    ThrowHelper.ThrowSocketWriteError(this.endpoint, awaitable.Arguments.SocketError);
                 }
             }
-            else
-            {
-                // Legacy SocketAwaitable path
-                using (var awaitable = new SocketAwaitable())
-                {
-                    awaitable.Arguments.BufferList = buffers;
-                    try
-                    {
-                        await this.socket.SendAsync(awaitable);
-                    }
-                    catch
-                    {
-                        this.isAlive = false;
-                        ThrowHelper.ThrowSocketWriteError(this.endpoint, awaitable.Arguments.SocketError);
-                    }
-
-                    if (awaitable.Arguments.SocketError != SocketError.Success)
-                    {
-                        this.isAlive = false;
-                        ThrowHelper.ThrowSocketWriteError(this.endpoint, awaitable.Arguments.SocketError);
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Legacy method name - use WriteAsync instead.
-        /// </summary>
-        [Obsolete("Use WriteAsync instead")]
-        public async Task WriteSync(IList<ArraySegment<byte>> buffers)
-        {
-            await WriteAsync(buffers).ConfigureAwait(false);
         }
 
         /// <summary>
