@@ -74,9 +74,38 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
 		private bool? asyncLoopState;
 		private Action<bool> afterAsyncRead;
 
-        protected internal override System.Threading.Tasks.Task<IOperationResult> ReadResponseAsync(PooledSocket socket)
+        protected internal override async System.Threading.Tasks.Task<IOperationResult> ReadResponseAsync(PooledSocket socket)
         {
-            throw new NotImplementedException();
+            this.result = new Dictionary<string, CacheItem>();
+            this.Cas = new Dictionary<string, ulong>();
+            var operationResult = new BinaryOperationResult();
+
+            var response = new BinaryResponse();
+
+            while (await response.ReadAsync(socket).ConfigureAwait(false))
+            {
+                this.StatusCode = response.StatusCode;
+
+                if (response.CorrelationId == this.noopId)
+                {
+                    return operationResult.Pass();
+                }
+
+                string key;
+                if (!this.idToKey.TryGetValue(response.CorrelationId, out key))
+                {
+                    log.WarnFormat("Found response with CorrelationId {0}, but no key is matching it.", response.CorrelationId);
+                    continue;
+                }
+
+                if (log.IsDebugEnabled) log.DebugFormat("Reading item {0}", key);
+
+                var flags = (ushort)BinaryConverter.DecodeInt32(response.Extra, 0);
+                this.result[key] = new CacheItem(flags, response.Data);
+                this.Cas[key] = response.CAS;
+            }
+
+            return operationResult.Fail("Finished reading but did not find the NOOP response.");
         }
 
 		protected internal override bool ReadResponseAsync(PooledSocket socket, Action<bool> next)

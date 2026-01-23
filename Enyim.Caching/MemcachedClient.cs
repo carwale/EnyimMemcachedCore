@@ -1650,7 +1650,6 @@ namespace Enyim.Caching
             // the mget results will be mapped using this index
             
             using var activity = ActivitySourceHelper.StartActivity("PerformMultiGetAsync");
-            activity?.SetTag("cache.multiget.keys.count", keys.Count());
             
             var hashed = new Dictionary<string, string>();
             foreach (var key in keys)
@@ -1658,44 +1657,64 @@ namespace Enyim.Caching
                 hashed[this.keyTransformer.Transform(key)] = key;
             }
 
+            activity?.SetTag("cache.multiget.keys.count", hashed.Count);
+
             var byServer = GroupByServer(hashed.Keys);
 
-            var retval = new Dictionary<string, T>(hashed.Count);
-            var tasks = byServer.Select(async slice =>
+            // Materialize tasks immediately to ensure all operations start in parallel
+            var tasks = new List<Task<Dictionary<string, T>>>(byServer.Count);
+            foreach (var slice in byServer)
             {
                 var node = slice.Key;
-                
-                activity.AddTagsForKeys(node, keys);
+                activity?.AddTagsForKeys(node, keys);
                 
                 var nodeKeys = slice.Value;
                 var mget = this.pool.OperationFactory.MultiGet(nodeKeys);
-                if ((await node.ExecuteAsync(mget)).Success)
-                {
-                    Dictionary<string, T> localRetval = new(mget.Result.Count);
-                    foreach (var kvp in mget.Result)
-                    {
-                        if (hashed.TryGetValue(kvp.Key, out var original))
-                        {
-                            localRetval[original] = collector(mget, kvp);
-                        }
-                    }
-                    return localRetval;
-                }
-                return new Dictionary<string, T>();
-            });
+                
+                // Start the task immediately and add to list
+                tasks.Add(ExecuteNodeMultiGetAsync(node, mget, hashed, collector));
+            }
 
-            var results = await Task.WhenAll(tasks);
+            // Wait for all tasks to complete
+            var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+            
+            // Merge results efficiently
+            var retval = new Dictionary<string, T>(hashed.Count);
             foreach (var result in results)
             {
-                foreach (var kvp in result)
+                if (result != null && result.Count > 0)
                 {
-                    retval[kvp.Key] = kvp.Value;
+                    foreach (var kvp in result)
+                    {
+                        retval[kvp.Key] = kvp.Value;
+                    }
                 }
             }
             
-                activity.SetSuccess();
+            activity?.SetSuccess();
             
             return retval;
+        }
+
+        private async Task<Dictionary<string, T>> ExecuteNodeMultiGetAsync<T>(
+            IMemcachedNode node,
+            IMultiGetOperation mget,
+            Dictionary<string, string> hashed,
+            Func<IMultiGetOperation, KeyValuePair<string, CacheItem>, T> collector)
+        {
+            if ((await node.ExecuteAsync(mget).ConfigureAwait(false)).Success)
+            {
+                var localRetval = new Dictionary<string, T>(mget.Result.Count);
+                foreach (var kvp in mget.Result)
+                {
+                    if (hashed.TryGetValue(kvp.Key, out var original))
+                    {
+                        localRetval[original] = collector(mget, kvp);
+                    }
+                }
+                return localRetval;
+            }
+            return null;
         }
 
         protected Dictionary<IMemcachedNode, IList<string>> GroupByServer(IEnumerable<string> keys)
