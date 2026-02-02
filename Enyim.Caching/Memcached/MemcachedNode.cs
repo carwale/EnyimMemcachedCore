@@ -723,10 +723,10 @@ namespace Enyim.Caching.Memcached
                     //if Get, call BinaryRequest.CreateBuffer()
                     var b = op.GetBuffer();
 
-                    await pooledSocket.WriteSync(b);
+                    await pooledSocket.WriteAsync(b).ConfigureAwait(false);
 
-                    //if Get, call BinaryResponse
-                    var readResult = op.ReadResponse(pooledSocket);
+                    //if Get, call BinaryResponse - use async version
+                    var readResult = await op.ReadResponseAsync(pooledSocket).ConfigureAwait(false);
                     if (readResult.Success)
                     {
                         result.Pass();

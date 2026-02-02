@@ -62,15 +62,7 @@ namespace Enyim.Caching.Memcached
 
         private void ConnectWithTimeout(Socket socket, EndPoint endpoint, int timeout)
         {
-            //var task = socket.ConnectAsync(endpoint);
-            //if(!task.Wait(timeout))
-            //{
-            //    using (socket)
-            //    {
-            //        throw new TimeoutException("Could not connect to " + endpoint);
-            //    }
-            //}  
-
+            // Resolve DNS endpoint if needed (non-Windows platforms)
             if (endpoint is DnsEndPoint && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 var dnsEndPoint = ((DnsEndPoint)endpoint);
@@ -100,21 +92,6 @@ namespace Enyim.Caching.Memcached
             } else {
                  LastConnectionTimestamp = DateTime.UtcNow;
             }
-
-            /*
-            var mre = new ManualResetEvent(false);
-            socket.Connect(endpoint, iar =>
-            {
-                try { using (iar.AsyncWaitHandle) socket.EndConnect(iar); }
-                catch { }
-
-                mre.Set();
-            }, null);
-
-            if (!mre.WaitOne(timeout) || !socket.Connected)
-                using (socket)
-                    throw new TimeoutException("Could not connect to " + endpoint);
-           */
         }
 
         private void OnConnectCompleted(object sender, SocketAsyncEventArgs args)
@@ -248,6 +225,7 @@ namespace Enyim.Caching.Memcached
 
         public async Task<byte[]> ReadBytesAsync(int count)
         {
+
             using (var awaitable = new SocketAwaitable())
             {
                 awaitable.Buffer = new ArraySegment<byte>(new byte[count], 0, count);
@@ -331,7 +309,7 @@ namespace Enyim.Caching.Memcached
             }
         }
 
-        public async Task WriteSync(IList<ArraySegment<byte>> buffers)
+        public async Task WriteAsync(IList<ArraySegment<byte>> buffers)
         {
             using (var awaitable = new SocketAwaitable())
             {
