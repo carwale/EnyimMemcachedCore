@@ -223,15 +223,55 @@ namespace Enyim.Caching.Memcached
             }
         }
 
+        /// <summary>
+        /// Reads exactly <paramref name="count"/> bytes from the socket asynchronously.
+        /// Loops until all requested bytes are received (matches sync Read behavior).
+        /// </summary>
         public async Task<byte[]> ReadBytesAsync(int count)
         {
+            this.CheckDisposed();
+
+            var buffer = new byte[count];
+            int totalRead = 0;
 
             using (var awaitable = new SocketAwaitable())
             {
-                awaitable.Buffer = new ArraySegment<byte>(new byte[count], 0, count);
-                await this.socket.ReceiveAsync(awaitable);
-                return awaitable.Transferred.Array;
+                while (totalRead < count)
+                {
+                    int toRead = count - totalRead;
+                    awaitable.Buffer = new ArraySegment<byte>(buffer, totalRead, toRead);
+
+                    try
+                    {
+                        await this.socket.ReceiveAsync(awaitable);
+                    }
+                    catch (Exception)
+                    {
+                        this.isAlive = false;
+                        throw;
+                    }
+
+                    if (awaitable.Arguments.SocketError != SocketError.Success)
+                    {
+                        this.isAlive = false;
+                        throw new IOException(
+                            string.Format("Failed to read from the socket '{0}'. Error: {1}",
+                                this.endpoint,
+                                awaitable.Arguments.SocketError));
+                    }
+
+                    int received = awaitable.Transferred.Count;
+                    if (received <= 0)
+                    {
+                        this.isAlive = false;
+                        throw new IOException("Connection closed or read returned 0.");
+                    }
+
+                    totalRead += received;
+                }
             }
+
+            return buffer;
         }
 
         /// <summary>
