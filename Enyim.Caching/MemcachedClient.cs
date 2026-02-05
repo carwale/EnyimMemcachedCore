@@ -1657,7 +1657,7 @@ namespace Enyim.Caching
                 hashed[this.keyTransformer.Transform(key)] = key;
             }
 
-            activity?.SetTag("cache.multiget.keys.count", hashed.Count);
+            activity?.SetTag("cache.multiget.keys.count", keys.Count());
 
             var byServer = GroupByServer(hashed.Keys);
 
