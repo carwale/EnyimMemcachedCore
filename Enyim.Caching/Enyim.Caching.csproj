@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <Description>CWMemcache is a Memcached client library for .NET Core. Usage: Add services.AddEnyimMemcached(...) and app.UseEnyimMemcached() in Startup. Add IMemcachedClient into constructor.</Description>
-    <VersionPrefix>3.4.1</VersionPrefix>
+    <VersionPrefix>3.4.2</VersionPrefix>
     <TargetFrameworks>net6.0</TargetFrameworks>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>CWMemcache</AssemblyName>
@@ -11,6 +11,9 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <LangVersion>latest</LangVersion>
     <PackageReleaseNotes>
+      3.4.2
+      Fix object null reference exception while setting tags in ActivitySource.
+      ----------
       3.4.1
       Fixed reading bytes async using while loop
       ----------
