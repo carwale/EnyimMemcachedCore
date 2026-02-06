@@ -249,23 +249,19 @@ namespace Enyim.Caching
 
         public async Task<IGetOperationResult<T>> GetAsync<T>(string key)
         {
-            var result = new DefaultGetOperationResultFactory<T>().Create();
+            using var activity = ActivitySourceHelper.StartActivity("GetAsync", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key)
+            });
 
+            var result = new DefaultGetOperationResultFactory<T>().Create();
             var hashedKey = this.keyTransformer.Transform(key);
             var node = this.pool.Locate(hashedKey);
 
-
-            
-            using var activity = ActivitySourceHelper.StartActivity("GetAsync", new[]
-            {
-                new KeyValuePair<string, object?>("net.peer.query.key", key),
-                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
-                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
-            });
-            
-
             if (node != null)
             {
+                activity?.SetTag("net.peer.name", node.EndPoint);
+                activity?.SetTag("net.peer.isActive", node.IsAlive);
                 try
                 {
                     var command = this.pool.OperationFactory.Get(hashedKey);
@@ -280,7 +276,7 @@ namespace Enyim.Caching
                         result.Flags = flags; // Store flags in result
                         result.Value = transcoder.Deserialize<T>(command.Result);
                         
-                        activity.SetSuccess();
+                        activity?.SetSuccess();
                         
                         return result;
                     }
@@ -288,7 +284,7 @@ namespace Enyim.Caching
                 catch (Exception ex)
                 {
                     
-                    activity.SetException(result.Exception);
+                    activity?.SetException(result.Exception);
                     
                     _logger.LogError(0, ex, $"{nameof(GetAsync)}(\"{key}\")");
                     throw;
@@ -297,7 +293,7 @@ namespace Enyim.Caching
             else
             {
                 
-                activity.SetException(new Exception("Unable to locate node"));
+                activity?.SetException(new Exception("Unable to locate node"));
                 
                 _logger.LogError($"Unable to locate memcached node");
             }
@@ -314,23 +310,19 @@ namespace Enyim.Caching
         /// <returns>The retrieved item wrapped in CacheValue with critical flag, or default if the key was not found.</returns>
         public async Task<IGetOperationResult<CacheValue<T>>> GetCacheValueAsync<T>(string key)
         {
-            var result = new DefaultGetOperationResultFactory<CacheValue<T>>().Create();
+            using var activity = ActivitySourceHelper.StartActivity("GetCacheValueAsync", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key)
+            });
 
+            var result = new DefaultGetOperationResultFactory<CacheValue<T>>().Create();
             var hashedKey = this.keyTransformer.Transform(key);
             var node = this.pool.Locate(hashedKey);
 
-
-            
-            using var activity = ActivitySourceHelper.StartActivity("GetCacheValueAsync", new[]
-            {
-                new KeyValuePair<string, object?>("net.peer.query.key", key),
-                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
-                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
-            });
-            
-
             if (node != null)
             {
+                activity?.SetTag("net.peer.name", node.EndPoint);
+                activity?.SetTag("net.peer.isActive", node.IsAlive);
                 try
                 {
                     var command = this.pool.OperationFactory.Get(hashedKey);
@@ -346,7 +338,7 @@ namespace Enyim.Caching
                             result.Value = new CacheValue<T>(default, true);
                             
                             activity?.SetTag("cache.flag.isCritical", "true");
-                            activity.SetSuccess();
+                            activity?.SetSuccess();
                             
                             return result;
                         }
@@ -355,7 +347,7 @@ namespace Enyim.Caching
                         var deserializedValue = transcoder.Deserialize<T>(command.Result);
                         result.Value = new CacheValue<T>(deserializedValue, isCritical);
                         
-                        activity.SetSuccess();
+                        activity?.SetSuccess();
                         
                         return result;
                     }
@@ -363,7 +355,7 @@ namespace Enyim.Caching
                 catch (Exception ex)
                 {
                     
-                    activity.SetException(result.Exception);
+                    activity?.SetException(result.Exception);
                     
                     _logger.LogError(0, ex, $"{nameof(GetCacheValueAsync)}(\"{key}\")");
                     throw ex;
@@ -372,7 +364,7 @@ namespace Enyim.Caching
             else
             {
                 
-                activity.SetException(new Exception("Unable to locate node"));
+                activity?.SetException(new Exception("Unable to locate node"));
                 
                 _logger.LogError($"Unable to locate memcached node");
             }
@@ -439,26 +431,22 @@ namespace Enyim.Caching
 
         protected virtual IGetOperationResult PerformTryGet(string key, out ulong cas, out object value)
         {
+            using var activity = ActivitySourceHelper.StartActivity("PerformTryGet", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key)
+            });
+
             var hashedKey = this.keyTransformer.Transform(key);
             var node = this.pool.Locate(hashedKey);
             var result = GetOperationResultFactory.Create();
-
-            
-            using var activity = ActivitySourceHelper.StartActivity("PerformTryGet", new[]
-            {
-                new KeyValuePair<string, object?>("net.peer.query.key", key),
-                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
-                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
-            });
-            
-
             _logger.LogInformation($"Inside PerformTryGet");
-
             cas = 0;
             value = null;
 
             if (node != null)
             {
+                activity?.SetTag("net.peer.name", node.EndPoint);
+                activity?.SetTag("net.peer.isActive", node.IsAlive);
                 var command = this.pool.OperationFactory.Get(hashedKey);
                 var commandResult = node.Execute(command);
 
@@ -472,7 +460,7 @@ namespace Enyim.Caching
                     result.Cas = cas = command.CasValue;
 
                     
-                    activity.SetSuccess();
+                    activity?.SetSuccess();
                     
                     result.Pass();
                     return result;
@@ -480,7 +468,7 @@ namespace Enyim.Caching
                 else
                 {
                     
-                    activity.SetException(result.Exception);
+                    activity?.SetException(result.Exception);
                     
                     commandResult.Combine(result);
                     return result;
@@ -490,7 +478,7 @@ namespace Enyim.Caching
             result.Value = value;
             result.Cas = cas;
             
-            activity.SetException(new Exception("Unable to locate node"));
+            activity?.SetException(new Exception("Unable to locate node"));
             
             result.Fail("Unable to locate node");
             return result;
@@ -498,26 +486,22 @@ namespace Enyim.Caching
 
         protected virtual IGetOperationResult<CacheValue<object>> PerformTryGetCacheValue(string key, out ulong cas, out CacheValue<object> value)
         {
+            using var activity = ActivitySourceHelper.StartActivity("PerformTryGetCacheValue", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key)
+            });
+
             var hashedKey = this.keyTransformer.Transform(key);
             var node = this.pool.Locate(hashedKey);
             var result = new DefaultGetOperationResultFactory<CacheValue<object>>().Create();
-
-            
-            using var activity = ActivitySourceHelper.StartActivity("PerformTryGetCacheValue", new[]
-            {
-                new KeyValuePair<string, object?>("net.peer.query.key", key),
-                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
-                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
-            });
-            
-
             _logger.LogInformation($"Inside PerformTryGet");
-
             cas = 0;
             value = null;
 
             if (node != null)
             {
+                activity?.SetTag("net.peer.name", node.EndPoint);
+                activity?.SetTag("net.peer.isActive", node.IsAlive);
                 var command = this.pool.OperationFactory.Get(hashedKey);
                 var commandResult = node.Execute(command);
 
@@ -530,7 +514,7 @@ namespace Enyim.Caching
                         result.Flags = flags;
                         
                         activity?.SetTag("cache.flag.isCritical", "true");
-                        activity.SetSuccess();
+                        activity?.SetSuccess();
                         
                         result.Pass();
                         return result;
@@ -542,7 +526,7 @@ namespace Enyim.Caching
                     result.Cas = cas = command.CasValue;
 
                     
-                    activity.SetSuccess();
+                    activity?.SetSuccess();
                     
                     result.Pass();
                     return result;
@@ -550,7 +534,7 @@ namespace Enyim.Caching
                 else
                 {
                     
-                    activity.SetException(result.Exception);
+                    activity?.SetException(result.Exception);
                     
                     commandResult.Combine(result);
                     return result;
@@ -560,7 +544,7 @@ namespace Enyim.Caching
             result.Value = value;
             result.Cas = cas;
             
-            activity.SetException(new Exception("Unable to locate node"));
+            activity?.SetException(new Exception("Unable to locate node"));
             
             result.Fail("Unable to locate node");
             return result;
@@ -759,26 +743,22 @@ namespace Enyim.Caching
 
         protected virtual IStoreOperationResult PerformStore(StoreMode mode, string key, object value, uint expires, ref ulong cas, out int statusCode)
         {
+            using var activity = ActivitySourceHelper.StartActivity("PerformStore", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key)
+            });
+
             var hashedKey = this.keyTransformer.Transform(key);
             var node = this.pool.Locate(hashedKey);
             var result = StoreOperationResultFactory.Create();
-
-
-            
-            using var activity = ActivitySourceHelper.StartActivity("PerformStore", new[]
-            {
-                new KeyValuePair<string, object?>("net.peer.query.key", key),
-                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
-                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
-            });
-            
-
             statusCode = -1;
 
             //Removed null check on value parameter, in order to allow storing null
 
             if (node != null)
             {
+                activity?.SetTag("net.peer.name", node.EndPoint);
+                activity?.SetTag("net.peer.isActive", node.IsAlive);
                 CacheItem item;
 
                 try 
@@ -803,14 +783,14 @@ namespace Enyim.Caching
                 if (commandResult.Success)
                 {
                     
-                activity.SetSuccess();
+                activity?.SetSuccess();
             
                     result.Pass();
                     return result;
                 }
 
                 
-                    activity.SetException(result.Exception);
+                    activity?.SetException(result.Exception);
                     
                 commandResult.Combine(result);
                 return result;
@@ -819,7 +799,7 @@ namespace Enyim.Caching
             //if (this.performanceMonitor != null) this.performanceMonitor.Store(mode, 1, false);
 
             
-            activity.SetException(new Exception("Unable to locate node"));
+            activity?.SetException(new Exception("Unable to locate node"));
             
             result.Fail("Unable to locate node");
             return result;
@@ -827,26 +807,22 @@ namespace Enyim.Caching
 
         protected virtual IStoreOperationResult PerformStoreWithFlags(StoreMode mode, string key, object value, uint expires, CacheFlags cacheFlags, ref ulong cas, out int statusCode)
         {
+            using var activity = ActivitySourceHelper.StartActivity("PerformStoreWithFlags", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key)
+            });
+
             var hashedKey = this.keyTransformer.Transform(key);
             var node = this.pool.Locate(hashedKey);
             var result = StoreOperationResultFactory.Create();
-
-
-            
-            using var activity = ActivitySourceHelper.StartActivity("PerformStoreWithFlags", new[]
-            {
-                new KeyValuePair<string, object?>("net.peer.query.key", key),
-                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
-                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
-            });
-            
-
             statusCode = -1;
 
             //Removed null check on value parameter, in order to allow storing null
 
             if (node != null)
             {
+                activity?.SetTag("net.peer.name", node.EndPoint);
+                activity?.SetTag("net.peer.isActive", node.IsAlive);
                 CacheItem item;
 
                 try 
@@ -877,14 +853,14 @@ namespace Enyim.Caching
                 {
                     
                     activity?.SetTag("cache.flag.isCritical", "true");
-                    activity.SetSuccess();
+                    activity?.SetSuccess();
             
                     result.Pass();
                     return result;
                 }
 
                 
-                    activity.SetException(result.Exception);
+                    activity?.SetException(result.Exception);
                     
                 commandResult.Combine(result);
                 return result;
@@ -893,7 +869,7 @@ namespace Enyim.Caching
             //if (this.performanceMonitor != null) this.performanceMonitor.Store(mode, 1, false);
 
             
-            activity.SetException(new Exception("Unable to locate node"));
+            activity?.SetException(new Exception("Unable to locate node"));
             
             result.Fail("Unable to locate node");
             return result;
@@ -901,26 +877,23 @@ namespace Enyim.Caching
 
         protected async virtual Task<IStoreOperationResult> PerformStoreAsync(StoreMode mode, string key, object value, uint expires)
         {
+            using var activity = ActivitySourceHelper.StartActivity("PerformStoreAsync", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key)
+            });
+
             var hashedKey = this.keyTransformer.Transform(key);
             var node = this.pool.Locate(hashedKey);
             var result = StoreOperationResultFactory.Create();
-
-            
-            using var activity = ActivitySourceHelper.StartActivity("PerformStoreAsync", new[]
-            {
-                new KeyValuePair<string, object?>("net.peer.query.key", key),
-                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
-                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
-            });
-            
-
             int statusCode = -1;
             ulong cas = 0;
-            
+
             //Removed null check on value parameter, in order to allow storing null
 
             if (node != null)
             {
+                activity?.SetTag("net.peer.name", node.EndPoint);
+                activity?.SetTag("net.peer.isActive", node.IsAlive);
                 CacheItem item;
 
                 try 
@@ -945,14 +918,14 @@ namespace Enyim.Caching
                 if (commandResult.Success)
                 {
                     
-                activity.SetSuccess();
+                activity?.SetSuccess();
             
                     result.Pass();
                     return result;
                 }
 
                 
-                    activity.SetException(result.Exception);
+                    activity?.SetException(result.Exception);
                     
                 commandResult.Combine(result);
                 return result;
@@ -961,7 +934,7 @@ namespace Enyim.Caching
             //if (this.performanceMonitor != null) this.performanceMonitor.Store(mode, 1, false);
 
             
-            activity.SetException(new Exception("Unable to locate node"));
+            activity?.SetException(new Exception("Unable to locate node"));
             
             result.Fail("Unable to locate memcached node");
             return result;
@@ -969,24 +942,21 @@ namespace Enyim.Caching
 
         protected async virtual Task<bool> PerformStoreWithFlagsAsync<T>(StoreMode mode, string key, T value, uint expires, CacheFlags cacheFlags)
         {
+            using var activity = ActivitySourceHelper.StartActivity("PerformStoreWithFlagsAsync", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key)
+            });
+
             var hashedKey = this.keyTransformer.Transform(key);
             var node = this.pool.Locate(hashedKey);
             var result = StoreOperationResultFactory.Create();
-
-            
-            using var activity = ActivitySourceHelper.StartActivity("PerformStoreWithFlagsAsync", new[]
-            {
-                new KeyValuePair<string, object?>("net.peer.query.key", key),
-                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
-                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
-            });
-            
-
             int statusCode = -1;
             ulong cas = 0;
 
             if (node != null)
             {
+                activity?.SetTag("net.peer.name", node.EndPoint);
+                activity?.SetTag("net.peer.isActive", node.IsAlive);
                 CacheItem item;
 
                 try
@@ -1022,21 +992,21 @@ namespace Enyim.Caching
                 if (commandResult.Success)
                 {
                     
-                    activity.SetSuccess();
+                    activity?.SetSuccess();
                     
                     result.Pass();
                     return result.Success;
                 }
 
                 
-                activity.SetException(result.Exception);
+                activity?.SetException(result.Exception);
                 
                 commandResult.Combine(result);
                 return result.Success;
             }
 
             
-            activity.SetException(new Exception("Unable to locate node"));
+            activity?.SetException(new Exception("Unable to locate node"));
             
             result.Fail("Unable to locate memcached node");
             return result.Success;
@@ -1244,21 +1214,19 @@ namespace Enyim.Caching
 
         protected virtual IMutateOperationResult PerformMutate(MutationMode mode, string key, ulong defaultValue, ulong delta, uint expires, ref ulong cas)
         {
+            using var activity = ActivitySourceHelper.StartActivity("PerformMutate", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key)
+            });
+
             var hashedKey = this.keyTransformer.Transform(key);
             var node = this.pool.Locate(hashedKey);
             var result = MutateOperationResultFactory.Create();
 
-            
-            using var activity = ActivitySourceHelper.StartActivity("PerformMutate", new[]
-            {
-                new KeyValuePair<string, object?>("net.peer.query.key", key),
-                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
-                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
-            });
-            
-
             if (node != null)
             {
+                activity?.SetTag("net.peer.name", node.EndPoint);
+                activity?.SetTag("net.peer.isActive", node.IsAlive);
                 var command = this.pool.OperationFactory.Mutate(mode, hashedKey, defaultValue, delta, expires, cas);
                 var commandResult = node.Execute(command);
 
@@ -1268,8 +1236,7 @@ namespace Enyim.Caching
                 if (commandResult.Success)
                 {
                     result.Value = command.Result;
-                    
-                activity.SetSuccess();
+                    activity?.SetSuccess();
             
                     result.Pass();
                     return result;
@@ -1277,7 +1244,7 @@ namespace Enyim.Caching
                 else
                 {
                     
-                    activity.SetException(result.Exception);
+                    activity?.SetException(result.Exception);
                     
                     result.InnerResult = commandResult;
                     result.Fail("Mutate operation failed, see InnerResult or StatusCode for more details");
@@ -1286,7 +1253,7 @@ namespace Enyim.Caching
             }
 
             
-            activity.SetException(new Exception("Unable to locate node"));
+            activity?.SetException(new Exception("Unable to locate node"));
             
             // TODO not sure about the return value when the command fails
             result.Fail("Unable to locate node");
@@ -1353,21 +1320,19 @@ namespace Enyim.Caching
 
         protected virtual IConcatOperationResult PerformConcatenate(ConcatenationMode mode, string key, ref ulong cas, ArraySegment<byte> data)
         {
+            using var activity = ActivitySourceHelper.StartActivity("PerformConcatenate", new[]
+            {
+                new KeyValuePair<string, object?>("net.peer.query.key", key)
+            });
+
             var hashedKey = this.keyTransformer.Transform(key);
             var node = this.pool.Locate(hashedKey);
             var result = ConcatOperationResultFactory.Create();
 
-            
-            using var activity = ActivitySourceHelper.StartActivity("PerformConcatenate", new[]
-            {
-                new KeyValuePair<string, object?>("net.peer.query.key", key),
-                new KeyValuePair<string, object?>("net.peer.name", node.EndPoint),
-                new KeyValuePair<string, object?>("net.peer.isActive", node.IsAlive)
-            });
-            
-
             if (node != null)
             {
+                activity?.SetTag("net.peer.name", node.EndPoint);
+                activity?.SetTag("net.peer.isActive", node.IsAlive);
                 var command = this.pool.OperationFactory.Concat(mode, hashedKey, cas, data);
                 var commandResult = node.Execute(command);
 
@@ -1376,14 +1341,14 @@ namespace Enyim.Caching
                     result.Cas = cas = command.CasValue;
                     result.StatusCode = command.StatusCode;
                     
-                activity.SetSuccess();
+                activity?.SetSuccess();
             
                     result.Pass();
                 }
                 else
                 {
                     
-                    activity.SetException(result.Exception);
+                    activity?.SetException(result.Exception);
                     
                     result.InnerResult = commandResult;
                     result.Fail("Concat operation failed, see InnerResult or StatusCode for details");
@@ -1393,7 +1358,7 @@ namespace Enyim.Caching
             }
 
             
-            activity.SetException(new Exception("Unable to locate node"));
+            activity?.SetException(new Exception("Unable to locate node"));
             
             result.Fail("Unable to locate node");
             return result;
@@ -1417,7 +1382,7 @@ namespace Enyim.Caching
                 node.Execute(command);
             }
             
-                activity.SetSuccess();
+                activity?.SetSuccess();
             
         }
 
@@ -1458,7 +1423,7 @@ namespace Enyim.Caching
             }
 
             
-                activity.SetSuccess();
+                activity?.SetSuccess();
             
 
             return new ServerStats(results);
@@ -1589,12 +1554,10 @@ namespace Enyim.Caching
             foreach (var slice in byServer)
             {
                 var node = slice.Key;
-
-                
-                activity.AddTagsForKeys(node, keys);
-                
-
                 var nodeKeys = slice.Value;
+
+                activity?.AddTagsForKeys(node, nodeKeys);
+
                 var mget = this.pool.OperationFactory.MultiGet(nodeKeys);
 
                 // run gets in parallel
@@ -1624,7 +1587,7 @@ namespace Enyim.Caching
                     catch (Exception e)
                     {
                         
-                        activity.SetException(e);
+                        activity?.SetException(e);
                         
                         _logger.LogError(0, e, "PerformMultiGet");
                     }
@@ -1638,7 +1601,7 @@ namespace Enyim.Caching
             }
 
             
-                activity.SetSuccess();
+                activity?.SetSuccess();
                 
 
             return retval;
@@ -1666,9 +1629,10 @@ namespace Enyim.Caching
             foreach (var slice in byServer)
             {
                 var node = slice.Key;
-                activity?.AddTagsForKeys(node, keys);
-                
                 var nodeKeys = slice.Value;
+
+                activity?.AddTagsForKeys(node, nodeKeys);
+                
                 var mget = this.pool.OperationFactory.MultiGet(nodeKeys);
                 
                 // Start the task immediately and add to list
