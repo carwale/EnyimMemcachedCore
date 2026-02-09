@@ -1683,9 +1683,9 @@ namespace Enyim.Caching
             Dictionary<string, string> hashed,
             Func<IMultiGetOperation, KeyValuePair<string, CacheItem>, T> collector)
         {
+            var localRetval = new Dictionary<string, T>(mget.Result.Count);
             if ((await node.ExecuteAsync(mget).ConfigureAwait(false)).Success)
             {
-                var localRetval = new Dictionary<string, T>(mget.Result.Count);
                 foreach (var kvp in mget.Result)
                 {
                     if (hashed.TryGetValue(kvp.Key, out var original))
@@ -1693,9 +1693,8 @@ namespace Enyim.Caching
                         localRetval[original] = collector(mget, kvp);
                     }
                 }
-                return localRetval;
             }
-            return null;
+            return localRetval;
         }
 
         protected Dictionary<IMemcachedNode, IList<string>> GroupByServer(IEnumerable<string> keys)
