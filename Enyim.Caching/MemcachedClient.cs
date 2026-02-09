@@ -1683,7 +1683,6 @@ namespace Enyim.Caching
             Dictionary<string, string> hashed,
             Func<IMultiGetOperation, KeyValuePair<string, CacheItem>, T> collector)
         {
-            
             if ((await node.ExecuteAsync(mget).ConfigureAwait(false)).Success)
             {
                 var localRetval = new Dictionary<string, T>(mget.Result.Count);

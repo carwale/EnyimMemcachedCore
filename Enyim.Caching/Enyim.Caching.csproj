@@ -17,9 +17,6 @@
       3.4.2
       Fix object null reference exception while setting tags in ActivitySource.
       ----------
-      3.4.2
-      Fix object null reference exception while setting tags in ActivitySource.
-      ----------
       3.4.1
       Fixed reading bytes async using while loop
       ----------
