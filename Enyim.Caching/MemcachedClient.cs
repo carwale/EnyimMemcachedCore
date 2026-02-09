@@ -1695,7 +1695,7 @@ namespace Enyim.Caching
                 }
                 return localRetval;
             }
-            return null;
+            return [];
         }
 
         protected Dictionary<IMemcachedNode, IList<string>> GroupByServer(IEnumerable<string> keys)
