@@ -219,6 +219,7 @@ namespace Enyim.Caching.Memcached
             private readonly TimeSpan connectionIdleTimeout;
             private SemaphoreSlim semaphore;
             private readonly SemaphoreSlim cleanSemaphore;
+            private CancellationTokenSource reconciliationCts;
 
             private object initLock = new Object();
 
@@ -269,7 +270,9 @@ namespace Enyim.Caching.Memcached
                         }
                     }
 
-                    StartReconciliationTask();
+                    _ = StartReconciliationTask().ConfigureAwait(false);
+
+                    SetConnectionCountMetric();
 
                     if (_logger.IsEnabled(LogLevel.Debug))
                         _logger.LogDebug("Pool has been inited for {0} with {1} sockets", this.endPoint, this.minItems);
@@ -283,31 +286,45 @@ namespace Enyim.Caching.Memcached
                 }
             }
 
-            private void StartReconciliationTask()
+            private async Task StartReconciliationTask()
             {
                 if (this.connectionIdleTimeout == TimeSpan.Zero)
                     return;
 
+                this.reconciliationCts = new CancellationTokenSource();
                 var reconcileTimer = new PeriodicTimer(this.connectionIdleTimeout);
-                _ = RunTimer();
+                try
+                {
+                    await RunTimer().ConfigureAwait(false);
+                }
+                finally
+                {
+                    reconcileTimer.Dispose();
+                }
 
                 async Task RunTimer()
                 {
-                    while (await reconcileTimer.WaitForNextTickAsync().ConfigureAwait(false))
+                    try
                     {
-                        try
+                        while (await reconcileTimer.WaitForNextTickAsync(this.reconciliationCts.Token).ConfigureAwait(false))
                         {
-                            using var source = new CancellationTokenSource(this.connectionIdleTimeout);
-                            await ReconcileAsync(source.Token).ConfigureAwait(false);
-                            _metricFunctions.Set("cache_connection_count", (ulong)(maxItems - this.semaphore.CurrentCount + this.freeItems.Count), this.endPointStr);
-                        }
-                        catch (Exception e)
-                        {
-                            _logger.LogWarning("ReconciliationTaskFailed", new EventId(0), e);
+                            try
+                            {
+                                using var source = new CancellationTokenSource(this.connectionIdleTimeout);
+                                await ReconcileAsync(source.Token).ConfigureAwait(false);
+                                _metricFunctions.Set("cache_connection_count", (ulong)(maxItems - this.semaphore.CurrentCount + this.freeItems.Count), this.endPointStr);
+                            }
+                            catch (Exception e)
+                            {
+                                _logger.LogError(e, "ReconciliationTaskFailed");
+                            }
                         }
                     }
+                    catch (OperationCanceledException)
+                    {
+                        _logger.LogWarning("Reconciliation loop cancelled");
+                    }
                 }
-
             }
 
             private async Task ReconcileAsync(CancellationToken cancellationToken)
@@ -389,6 +406,21 @@ namespace Enyim.Caching.Memcached
                 get { return this.markedAsDeadUtc; }
             }
 
+            private void SetConnectionCountMetric()
+            {
+                if (this.isDisposed || this.semaphore == null || this.freeItems == null)
+                    return;
+                try
+                {
+                    var count = (ulong)(this.maxItems - this.semaphore.CurrentCount + this.freeItems.Count);
+                    _metricFunctions.Set("cache_connection_count", count, this.endPointStr);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error setting connection count metric");
+                }
+            }
+
             /// <summary>
             /// Acquires a new item from the pool
             /// </summary>
@@ -417,7 +449,7 @@ namespace Enyim.Caching.Memcached
                     message = "Pool is full, timeouting. " + this.endPoint;
                     if (_isDebugEnabled) _logger.LogDebug(message);
                     result.Fail(message, new TimeoutException());
-
+                    _logger.LogError(message);
                     // everyone is so busy
                     return result;
                 }
@@ -429,7 +461,7 @@ namespace Enyim.Caching.Memcached
                     message = "Pool is dead, returning null. " + this.endPoint;
                     if (_isDebugEnabled) _logger.LogDebug(message);
                     result.Fail(message);
-
+                    _logger.LogError(message);
                     return result;
                 }
 
@@ -458,6 +490,7 @@ namespace Enyim.Caching.Memcached
 
                         result.Pass(message);
                         result.Value = retval;
+                        SetConnectionCountMetric();
                         return result;
                     }
                     catch (Exception e)
@@ -489,6 +522,7 @@ namespace Enyim.Caching.Memcached
                     _logger.LogInformation(log);
                     result.Value = retval;
                     result.Pass();
+                    SetConnectionCountMetric();
                 }
                 catch (Exception e)
                 {
@@ -557,6 +591,7 @@ namespace Enyim.Caching.Memcached
 
                         // signal the event so if someone is waiting for it can reuse this item
                         this.semaphore.Release();
+                        SetConnectionCountMetric();
                     }
                     else
                     {
@@ -569,6 +604,7 @@ namespace Enyim.Caching.Memcached
                         // make sure to signal the Acquire so it can create a new conenction
                         // if the failure policy keeps the pool alive
                         this.semaphore.Release();
+                        SetConnectionCountMetric();
                     }
                 }
                 else
@@ -599,6 +635,17 @@ namespace Enyim.Caching.Memcached
                 {
                     this.isAlive = false;
                     this.isDisposed = true;
+
+                    // Stop reconciliation loop so it does not keep running and logging after dispose.
+                    try
+                    {
+                        this.reconciliationCts?.Cancel();
+                        this.reconciliationCts?.Dispose();
+                    }
+                    catch (Exception ex){ 
+                        _logger.LogError(ex, "Error cancelling reconciliation loop using token");
+                    }
+                    this.reconciliationCts = null;
 
                      lock (this.freeItems)
                     {
@@ -751,6 +798,7 @@ namespace Enyim.Caching.Memcached
             }
             else
             {
+                _logger.LogError("ExecuteOperationAsync: {success} {HasValue} {message} {innerResult}", result.Success, result.HasValue,result.Message, result.InnerResult);
                 result.Fail("Failed to obtain socket from pool");
                 return result;
             }
