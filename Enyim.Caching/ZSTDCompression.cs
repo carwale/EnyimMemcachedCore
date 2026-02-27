@@ -36,7 +36,7 @@ public static class ZSTDCompression
     /// </summary>
     /// <param name="data">The compressed byte array to decompress.</param>
     /// <returns>Decompressed data as an ArraySegment of bytes.</returns>
-    public static ArraySegment<byte> Decompress(ArraySegment<byte> data, ILogger<MemcachedClient> _logger)
+    public static ArraySegment<byte> Decompress(ArraySegment<byte> data, ILogger<MemcachedClient> _logger, string key)
     {
         if (data.Count == 0)
         {
@@ -52,7 +52,7 @@ public static class ZSTDCompression
             }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Decompression failed.");
+            _logger?.LogError(ex, $"Decompression failed for key: {key}");
             return data;
         }
     }

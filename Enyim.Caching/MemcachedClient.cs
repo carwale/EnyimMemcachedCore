@@ -147,13 +147,13 @@ namespace Enyim.Caching
                     {
                         if (typeof(T).GetTypeCode() == TypeCode.Object && typeof(T) != typeof(Byte[]))
                         {
-                            var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
+                            var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger, key);
                             command.Result = new CacheItem(command.Result.Flags, decompressedBytes);
                             return this.transcoder.Deserialize<T>(command.Result);
                         }
                         else
                         {
-                            var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
+                            var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger, key);
                             command.Result = new CacheItem(command.Result.Flags, decompressedBytes);
                             var tempResult = this.transcoder.Deserialize(command.Result);
                             if (tempResult != null)
@@ -201,7 +201,7 @@ namespace Enyim.Caching
                     if (commandResult.Success)
                     {
                         result.Success = true;
-                        var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
+                        var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger, key);
                         command.Result = new CacheItem(command.Result.Flags, decompressedBytes);
                         result.Value = transcoder.Deserialize<T>(command.Result);
                         return result;
@@ -299,7 +299,7 @@ namespace Enyim.Caching
 
                 if (commandResult.Success)
                 {
-                    var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
+                    var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger, key);
                     command.Result = new CacheItem(command.Result.Flags, decompressedBytes);
                     result.Value = value = this.transcoder.Deserialize(command.Result);
                     result.Cas = cas = command.CasValue;
@@ -1047,7 +1047,7 @@ namespace Enyim.Caching
         {
             return PerformMultiGet<T>(keys, (mget, kvp) =>
             {
-                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
+                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger, kvp.Key);
                 var decompressedCacheItem = new CacheItem(kvp.Value.Flags, decompressedBytes);
                 return this.transcoder.Deserialize<T>(decompressedCacheItem);
             });
@@ -1057,7 +1057,7 @@ namespace Enyim.Caching
         {
             return await PerformMultiGetAsync<T>(keys, (mget, kvp) =>
             {
-                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
+                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger, kvp.Key);
                 var decompressedCacheItem = new CacheItem(kvp.Value.Flags, decompressedBytes);
                 return this.transcoder.Deserialize<T>(decompressedCacheItem);
             });
@@ -1067,7 +1067,7 @@ namespace Enyim.Caching
         {
             return PerformMultiGet<CasResult<object>>(keys, (mget, kvp) => 
             {
-                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
+                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger, kvp.Key);
                 var decompressedCacheItem = new CacheItem(kvp.Value.Flags, decompressedBytes);
                 return new CasResult<object>
                 {
