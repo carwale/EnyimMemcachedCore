@@ -1,24 +1,24 @@
 using System;
+using System.Linq;
 
 namespace HashRingResolver
 {
     internal static class Program
     {
-        // TODO: Add servers here
-        private static readonly string[] Servers = {};
+        private const string ServersOption = "--servers";
+        private const string KeyOption = "--key";
 
         static int Main(string[] args)
         {
-            string key = ParseKeyFromArgs(args);
-            if (key == null)
+            if (!TryParseArgs(args, out string[] servers, out string key, out string error))
             {
-                Console.Error.WriteLine("Usage: HashRingResolver <key>   or   HashRingResolver --key <key>");
+                Console.Error.WriteLine(error);
                 return 1;
             }
 
             try
             {
-                var resolver = new HashRingResolver(Servers);
+                var resolver = new HashRingResolver(servers);
                 string server = resolver.GetServerForKey(key);
                 if (server == null)
                 {
@@ -36,15 +36,72 @@ namespace HashRingResolver
             }
         }
 
-        private static string ParseKeyFromArgs(string[] args)
+        private static bool TryParseArgs(string[] args, out string[] servers, out string key, out string error)
         {
+            servers = null;
+            key = null;
+            error = null;
+
             if (args == null || args.Length == 0)
-                return null;
+            {
+                error = GetUsage();
+                return false;
+            }
 
-            if (args.Length >= 2 && string.Equals(args[0], "--key", StringComparison.OrdinalIgnoreCase))
-                return args[1];
+            string serversArg = null;
+            string keyArg = null;
 
-            return args[0];
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (string.Equals(args[i], ServersOption, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (i + 1 >= args.Length)
+                    {
+                        error = $"Missing value for {ServersOption}. {GetUsage()}";
+                        return false;
+                    }
+                    serversArg = args[++i];
+                }
+                else if (string.Equals(args[i], KeyOption, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (i + 1 >= args.Length)
+                    {
+                        error = $"Missing value for {KeyOption}. {GetUsage()}";
+                        return false;
+                    }
+                    keyArg = args[++i];
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(serversArg))
+            {
+                error = $"Missing {ServersOption}. {GetUsage()}";
+                return false;
+            }
+
+            servers = serversArg
+                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => s.Length > 0)
+                .ToArray();
+
+            if (servers.Length == 0)
+            {
+                error = "At least one server address is required (format: host:port).";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(keyArg))
+            {
+                error = $"Missing {KeyOption}. {GetUsage()}";
+                return false;
+            }
+
+            key = keyArg;
+            return true;
         }
+
+        private static string GetUsage() =>
+            $"Usage: HashRingResolver --servers \"host1:11211,host2:11211\" --key \"mykey\"";
     }
 }
