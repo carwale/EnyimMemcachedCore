@@ -493,7 +493,7 @@ namespace Enyim.Caching
                 return result;
             }
 
-            result.Fail("Unable to locate memcached node");
+            result.Fail($"Unable to locate memcached node for key: {key}");
             return result;
         }
 

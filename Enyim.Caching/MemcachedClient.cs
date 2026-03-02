@@ -149,7 +149,7 @@ namespace Enyim.Caching
 
                     if (commandResult.Success)
                     {
-                        var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
+                        var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger, key);
                         uint flags = command.Result.Flags; // Capture flags before creating new CacheItem
                         command.Result = new CacheItem(flags, decompressedBytes);
                         
@@ -182,7 +182,7 @@ namespace Enyim.Caching
             }
             else
             {
-                _logger.LogError($"Unable to locate memcached node");
+                _logger.LogError("Unable to locate memcached node for {key}", key);
             }
 
             return default(T);
@@ -207,7 +207,7 @@ namespace Enyim.Caching
                         if (isCritical){
                             return new CacheValue<T>(default, isCritical);
                         }
-                        var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
+                        var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger, key);
                         command.Result = new CacheItem(flags, decompressedBytes);
                         
                         if (typeof(T).GetTypeCode() == TypeCode.Object && typeof(T) != typeof(Byte[]))
@@ -239,7 +239,7 @@ namespace Enyim.Caching
             }
             else
             {
-                _logger.LogError($"Unable to locate memcached node");
+                _logger.LogError("Unable to locate memcached node for {key}", key);
             }
 
             return new CacheValue<T>(default, false);
@@ -269,7 +269,7 @@ namespace Enyim.Caching
                     if (commandResult.Success)
                     {                    
                         result.Success = true;
-                        var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
+                        var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger, key);
                         uint flags = command.Result.Flags; // Capture flags before creating new CacheItem
                         command.Result = new CacheItem(flags, decompressedBytes);
                         result.Flags = flags; // Store flags in result
@@ -294,7 +294,7 @@ namespace Enyim.Caching
                 
                 activity?.SetException(new Exception("Unable to locate node"));
                 
-                _logger.LogError($"Unable to locate memcached node");
+                _logger.LogError("Unable to locate memcached node for {key}", key);
             }
 
             result.Success = false;
@@ -342,7 +342,7 @@ namespace Enyim.Caching
                             
                             return result;
                         }
-                        var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
+                        var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger, key);
                         command.Result = new CacheItem(flags, decompressedBytes);
                         var deserializedValue = transcoder.Deserialize<T>(command.Result);
                         result.Value = new CacheValue<T>(deserializedValue, isCritical);
@@ -366,7 +366,7 @@ namespace Enyim.Caching
                 
                 activity?.SetException(new Exception("Unable to locate node"));
                 
-                _logger.LogError($"Unable to locate memcached node");
+                _logger.LogError("Unable to locate memcached node for {key}", key);
             }
 
             result.Success = false;
@@ -455,7 +455,7 @@ namespace Enyim.Caching
 
                 if (commandResult.Success)
                 {
-                    var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
+                    var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger, key);
                     uint flags = command.Result.Flags; // Capture flags before creating new CacheItem
                     command.Result = new CacheItem(flags, decompressedBytes);
                     result.Flags = flags; // Store flags in result
@@ -525,7 +525,7 @@ namespace Enyim.Caching
                         result.Pass();
                         return result;
                     }
-                    var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger);
+                    var decompressedBytes = ZSTDCompression.Decompress(command.Result.Data, _logger, key);
                     command.Result = new CacheItem(flags, decompressedBytes);
                     result.Flags = flags; // Store flags in result
                     result.Value = value = new CacheValue<object>(this.transcoder.Deserialize(command.Result), isCritical);
@@ -772,7 +772,7 @@ namespace Enyim.Caching
                 try 
                 { 
                     item = this.transcoder.Serialize(value); 
-                    item.Data = ZSTDCompression.Compress(item.Data, _logger);
+                    item.Data = ZSTDCompression.Compress(item.Data, _logger, key);
                 }
                 catch (Exception e)
                 {
@@ -843,7 +843,7 @@ namespace Enyim.Caching
                     else{
                         item = this.transcoder.Serialize(value); 
                     }
-                    item.Data = ZSTDCompression.Compress(item.Data, _logger);
+                    item.Data = ZSTDCompression.Compress(item.Data, _logger, key);
                 }
                 catch (Exception e)
                 {
@@ -911,7 +911,7 @@ namespace Enyim.Caching
                 try 
                 { 
                     item = this.transcoder.Serialize(value);
-                    item.Data = ZSTDCompression.Compress(item.Data, _logger);
+                    item.Data = ZSTDCompression.Compress(item.Data, _logger, key);
                 }
                 catch (Exception e)
                 {
@@ -948,7 +948,7 @@ namespace Enyim.Caching
             
             activity?.SetException(new Exception("Unable to locate node"));
             
-            result.Fail("Unable to locate memcached node");
+            result.Fail($"Unable to locate memcached node for key: {key}");
             return result;
         }
 
@@ -986,7 +986,7 @@ namespace Enyim.Caching
                         // Normal processing for non-critical items
                         item = this.transcoder.Serialize(value);    
                         // Always compress (existing behavior)
-                        item.Data = ZSTDCompression.Compress(item.Data, _logger);
+                        item.Data = ZSTDCompression.Compress(item.Data, _logger, key);
                     }
                 }
                 catch (Exception e)
@@ -1022,7 +1022,7 @@ namespace Enyim.Caching
             
             activity?.SetException(new Exception("Unable to locate node"));
             
-            result.Fail("Unable to locate memcached node");
+            result.Fail($"Unable to locate memcached node for key: {key}");
             return result.Success;
         }
 
@@ -1471,7 +1471,7 @@ namespace Enyim.Caching
         {
             return PerformMultiGet<T>(keys, (mget, kvp) =>
             {
-                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
+                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger, kvp.Key);
                 uint flags = kvp.Value.Flags; // Capture flags
                 var decompressedCacheItem = new CacheItem(flags, decompressedBytes);
                 return this.transcoder.Deserialize<T>(decompressedCacheItem);
@@ -1487,7 +1487,7 @@ namespace Enyim.Caching
         {
             return await PerformMultiGetAsync<T>(keys, (mget, kvp) =>
             {
-                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
+                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger, kvp.Key);
                 uint flags = kvp.Value.Flags; // Capture flags
                 var decompressedCacheItem = new CacheItem(flags, decompressedBytes);
                 return this.transcoder.Deserialize<T>(decompressedCacheItem);
@@ -1503,7 +1503,7 @@ namespace Enyim.Caching
         {
             return PerformMultiGet<CacheValue<T>>(keys, (mget, kvp) =>
             {
-                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
+                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger, kvp.Key);
                 uint flags = kvp.Value.Flags; // Capture flags
                 bool isCritical = CacheFlagHelper.IsCritical(flags);
                 if (isCritical){
@@ -1524,7 +1524,7 @@ namespace Enyim.Caching
         {
             return await PerformMultiGetAsync<CacheValue<T>>(keys, (mget, kvp) =>
             {
-                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
+                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger, kvp.Key);
                 uint flags = kvp.Value.Flags; // Capture flags
                 bool isCritical = CacheFlagHelper.IsCritical(flags);
                 if (isCritical){
@@ -1541,7 +1541,7 @@ namespace Enyim.Caching
         {
             return PerformMultiGet<CasResult<object>>(keys, (mget, kvp) => 
             {
-                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger);
+                var decompressedBytes = ZSTDCompression.Decompress(kvp.Value.Data, _logger, kvp.Key);
                 uint flags = kvp.Value.Flags; // Capture flags
                 var decompressedCacheItem = new CacheItem(flags, decompressedBytes);
                 return new CasResult<object>
