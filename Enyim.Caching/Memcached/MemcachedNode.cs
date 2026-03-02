@@ -152,7 +152,7 @@ namespace Enyim.Caching.Memcached
             catch (Exception e)
             {
                 var message = "Acquire failed. Maybe we're already disposed?";
-                _logger.LogError(message, e);
+                _logger.LogError(e, message);
                 var result = new PooledSocketResult();
                 result.Fail(message, e);
                 return result;
@@ -280,7 +280,7 @@ namespace Enyim.Caching.Memcached
                 }
                 catch (Exception e)
                 {
-                    _logger.LogError("Could not init pool.", new EventId(0), e);
+                    _logger.LogError(e, "Could not init pool.");
 
                     this.MarkAsDead();
                 }
@@ -496,7 +496,7 @@ namespace Enyim.Caching.Memcached
                     catch (Exception e)
                     {
                         message = "Failed to reset an acquired socket.";
-                        _logger.LogError(message, e);
+                        _logger.LogError(e, message);
 
                         this.MarkAsDead();
                         this.semaphore.Release();
@@ -527,7 +527,7 @@ namespace Enyim.Caching.Memcached
                 catch (Exception e)
                 {
                     message = "Failed to create socket. " + this.endPoint;
-                    _logger.LogError(message, e);
+                    _logger.LogError(e, message);
 
                     // eventhough this item failed the failure policy may keep the pool alive
                     // so we need to make sure to release the semaphore, so new connections can be
@@ -741,7 +741,7 @@ namespace Enyim.Caching.Memcached
                 }
                 catch (IOException e)
                 {
-                    _logger.LogError(nameof(MemcachedNode), e);
+                    _logger.LogError(e, nameof(MemcachedNode));
 
                     result.Fail("Exception reading response", e);
                     return result;
@@ -786,7 +786,7 @@ namespace Enyim.Caching.Memcached
                 }
                 catch (IOException e)
                 {
-                    _logger.LogError(nameof(MemcachedNode), e);
+                    _logger.LogError(e, nameof(MemcachedNode));
 
                     result.Fail("Exception reading response", e);
                     return result;
@@ -828,7 +828,7 @@ namespace Enyim.Caching.Memcached
             }
             catch (IOException e)
             {
-                _logger.LogError(nameof(MemcachedNode), e);
+                _logger.LogError(e, nameof(MemcachedNode));
                 ((IDisposable)socket).Dispose();
 
                 return false;

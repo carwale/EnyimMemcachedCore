@@ -10,7 +10,7 @@ public static class ZSTDCompression
     /// </summary>
     /// <param name="data">The byte array to compress.</param>
     /// <returns>Compressed data as an ArraySegment of bytes.</returns>
-    public static ArraySegment<byte> Compress(ArraySegment<byte> data, ILogger<MemcachedClient> _logger)
+    public static ArraySegment<byte> Compress(ArraySegment<byte> data, ILogger<MemcachedClient> _logger, string key)
     {
         if (data.Count == 0)
         {
@@ -36,7 +36,7 @@ public static class ZSTDCompression
     /// </summary>
     /// <param name="data">The compressed byte array to decompress.</param>
     /// <returns>Decompressed data as an ArraySegment of bytes.</returns>
-    public static ArraySegment<byte> Decompress(ArraySegment<byte> data, ILogger<MemcachedClient> _logger)
+    public static ArraySegment<byte> Decompress(ArraySegment<byte> data, ILogger<MemcachedClient> _logger, string key)
     {
         if (data.Count == 0)
         {

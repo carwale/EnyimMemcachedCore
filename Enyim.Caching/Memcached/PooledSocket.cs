@@ -51,7 +51,6 @@ namespace Enyim.Caching.Memcached
             socket.ReceiveTimeout = rcv;
             socket.SendTimeout = rcv;
             socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-
             ConnectWithTimeout(socket, endpoint, timeout);
 
             this.socket = socket;
@@ -83,15 +82,37 @@ namespace Enyim.Caching.Memcached
             args.Completed += OnConnectCompleted;
             args.UserToken = completed;
             socket.ConnectAsync(args);
-            if (!completed.WaitOne(timeout) || !socket.Connected)
+
+            bool completedInTime = completed.WaitOne(timeout);
+
+            if (!completedInTime)
             {
                 using (socket)
                 {
-                    throw new TimeoutException("Could not connect to " + endpoint);
+                    throw new TimeoutException($"Connection timed out after {timeout}ms while connecting to {endpoint}");
                 }
-            } else {
-                 LastConnectionTimestamp = DateTime.UtcNow;
             }
+
+            if (!socket.Connected)
+            {
+                var socketError = args.SocketError;
+                using (socket)
+                {
+                    switch (socketError)
+                    {
+                        case SocketError.TimedOut:
+                            throw new TimeoutException($"Connection timed out to {endpoint}");
+                        case SocketError.ConnectionRefused:
+                            throw new SocketException((int)SocketError.ConnectionRefused);
+                        case SocketError.ConnectionReset:
+                            throw new SocketException((int)SocketError.ConnectionReset);
+                        default:
+                            throw new SocketException((int)socketError);
+                    }
+                }
+            }
+
+            LastConnectionTimestamp = DateTime.UtcNow;
         }
 
         private void OnConnectCompleted(object sender, SocketAsyncEventArgs args)
