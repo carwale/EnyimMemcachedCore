@@ -62,7 +62,7 @@ namespace Enyim.Caching.Memcached
             this.inputStream = new BasicNetworkStream(socket);            
         }
 
-        private async void ConnectWithTimeout(Socket socket, EndPoint endpoint, int timeout)
+        private void ConnectWithTimeout(Socket socket, EndPoint endpoint, int timeout)
         {
             // Resolve DNS endpoint if needed (non-Windows platforms)
             if (endpoint is DnsEndPoint && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
