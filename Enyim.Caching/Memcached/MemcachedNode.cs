@@ -696,7 +696,7 @@ namespace Enyim.Caching.Memcached
         {
             try
             {
-                return new PooledSocket(this.endPoint, this.config.ConnectionTimeout, this.config.ReceiveTimeout, _logger);
+                return new PooledSocket(this.endPoint, this.config.ConnectionTimeout, this.config.ReceiveTimeout, _logger, this.config.EnableTimeoutDiagnostics);
             }
             catch(Exception ex)
             {

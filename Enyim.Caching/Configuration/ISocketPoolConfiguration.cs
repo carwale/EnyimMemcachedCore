@@ -79,6 +79,11 @@ namespace Enyim.Caching.Configuration
 		}
 
 		INodeFailurePolicyFactory FailurePolicyFactory { get; set; }
+
+		/// <summary>
+		/// When true, connection timeouts will run shell-based network diagnostics (ping, port check, traceroute) in addition to in-process checks.
+		/// </summary>
+		bool EnableTimeoutDiagnostics { get; set; }
 	}
 }
 
