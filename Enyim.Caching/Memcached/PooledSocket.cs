@@ -84,11 +84,13 @@ namespace Enyim.Caching.Memcached
             args.RemoteEndPoint = endpoint;
             args.Completed += OnConnectCompleted;
             args.UserToken = completed;
+            _logger.LogWarning("Timestamp before connectasync {timestamp}", DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss.fff tt"));
             bool connected = socket.ConnectAsync(args);
+            _logger.LogWarning("Timestamp after connectasync {timestamp}", DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss.fff tt"));
             _logger.LogWarning("Connected: {Connected}", connected);
-            _logger.LogWarning("Timestamp before waitone {timestamp}", DateTime.UtcNow);
+            _logger.LogWarning("Timestamp before waitone {timestamp}", DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss.fff tt"));
             bool completedInTime = completed.WaitOne(timeout);
-            _logger.LogWarning("Timestamp after waitone {timestamp}", DateTime.UtcNow);
+            _logger.LogWarning("Timestamp after waitone {timestamp}", DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss.fff tt"));
             if (!completedInTime)
             {
                 RunTimeoutDiagnostics(endpoint);
