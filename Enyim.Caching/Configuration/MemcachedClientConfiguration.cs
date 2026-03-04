@@ -44,6 +44,7 @@ namespace Enyim.Caching.Configuration
             Servers = new List<EndPoint>();
             foreach (var server in options.Servers)
             {
+                _logger.LogInformation($"Adding server: {server.Address}:{server.Port}");
                 IPAddress address;
                 if (IPAddress.TryParse(server.Address, out address))
                 {
@@ -83,6 +84,7 @@ namespace Enyim.Caching.Configuration
                 _logger.LogInformation($"{nameof(SocketPool.QueueTimeout)}: {SocketPool.QueueTimeout}");
 
                 SocketPool.EnableTimeoutDiagnostics = options.SocketPool.EnableTimeoutDiagnostics;
+                _logger.LogInformation($"{nameof(SocketPool.EnableTimeoutDiagnostics)}: {SocketPool.EnableTimeoutDiagnostics}");
             }
 
             Protocol = options.Protocol;

@@ -89,7 +89,7 @@ namespace Enyim.Caching.Memcached
 
             if (!completedInTime)
             {
-                RunTimeoutDiagnostics(endpoint, timeout);
+                RunTimeoutDiagnostics(endpoint);
                 using (socket)
                 {
                     throw new TimeoutException($"Connection timed out after {timeout}ms while connecting to {endpoint}");
@@ -143,7 +143,7 @@ namespace Enyim.Caching.Memcached
             port = 0;
         }
 
-        private void RunTimeoutDiagnostics(EndPoint endpoint, int timeoutMs)
+        private void RunTimeoutDiagnostics(EndPoint endpoint)
         {
             GetHostAndPort(endpoint, out string host, out int port);
 
@@ -151,7 +151,7 @@ namespace Enyim.Caching.Memcached
 
             try
             {
-                RunInProcessDiagnostics(endpoint, host, port);
+                RunInProcessDiagnostics(endpoint, host);
                 if (_enableTimeoutDiagnostics)
                 {
                     RunShellDiagnostics(host, port);
@@ -163,7 +163,7 @@ namespace Enyim.Caching.Memcached
             }
         }
 
-        private void RunInProcessDiagnostics(EndPoint endpoint, string host, int port)
+        private void RunInProcessDiagnostics(EndPoint endpoint, string host)
         {
             if (endpoint is DnsEndPoint)
             {
@@ -192,6 +192,7 @@ namespace Enyim.Caching.Memcached
 
         private void RunShellCommand(string fileName, string arguments, int timeoutMs, string label)
         {
+            _logger.LogWarning("[TimeoutDiagnostics] {Label}: Running: {FileName} {Arguments}", label, fileName, arguments);
             try
             {
                 var startInfo = new ProcessStartInfo
