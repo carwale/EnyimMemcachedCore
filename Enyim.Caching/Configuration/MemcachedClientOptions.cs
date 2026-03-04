@@ -1,4 +1,4 @@
-﻿using Enyim.Caching.Memcached;
+using Enyim.Caching.Memcached;
 using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
@@ -67,6 +67,10 @@ namespace Enyim.Caching.Configuration
         public TimeSpan ReceiveTimeout { get; set; } = new TimeSpan(0, 0, 10);
         public TimeSpan DeadTimeout { get; set; } = new TimeSpan(0, 0, 10);
         public TimeSpan QueueTimeout { get; set; } = new TimeSpan(0, 0, 0, 0, 100);
+        /// <summary>
+        /// When true, connection timeouts run shell-based network diagnostics (ping, port check, traceroute) in addition to in-process checks.
+        /// </summary>
+        public bool EnableTimeoutDiagnostics { get; set; }
 
         public void CheckPoolSize()
         {
