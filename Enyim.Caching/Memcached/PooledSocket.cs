@@ -84,13 +84,19 @@ namespace Enyim.Caching.Memcached
             args.RemoteEndPoint = endpoint;
             args.Completed += OnConnectCompleted;
             args.UserToken = completed;
-            _logger.LogWarning("Timestamp before connectasync {timestamp}", DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss.fff tt"));
-            bool connected = socket.ConnectAsync(args);
-            _logger.LogWarning("Timestamp after connectasync {timestamp}", DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss.fff tt"));
-            _logger.LogWarning("Connected: {Connected}", connected);
-            _logger.LogWarning("Timestamp before waitone {timestamp}", DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss.fff tt"));
+
+            int correlationId = Random.Shared.Next(1, int.MaxValue);
+            var connectDiagnosticsEventId = new EventId(correlationId, "ConnectWithTimeout");
+            _logger.LogWarning(connectDiagnosticsEventId, "ConnectWithTimeout: before ConnectAsync at {Timestamp}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+            bool completedAsync = socket.ConnectAsync(args);
+            _logger.LogWarning(connectDiagnosticsEventId, "ConnectWithTimeout: after ConnectAsync at {Timestamp}, completedAsync={CompletedAsync}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"), completedAsync);
+            if (!completedAsync)
+            {
+                OnConnectCompleted(null, args);
+            }
+            _logger.LogWarning(connectDiagnosticsEventId, "ConnectWithTimeout: before WaitOne at {Timestamp}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
             bool completedInTime = completed.WaitOne(timeout);
-            _logger.LogWarning("Timestamp after waitone {timestamp}", DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss.fff tt"));
+            _logger.LogWarning(connectDiagnosticsEventId, "ConnectWithTimeout: after WaitOne at {Timestamp}, completedInTime={CompletedInTime}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"), completedInTime);
             if (!completedInTime)
             {
                 RunTimeoutDiagnostics(endpoint);
@@ -100,7 +106,7 @@ namespace Enyim.Caching.Memcached
                 }
             }
 
-            if (!socket.Connected)
+            if (args.SocketError != SocketError.Success)
             {
                 var socketError = args.SocketError;
                 using (socket)
