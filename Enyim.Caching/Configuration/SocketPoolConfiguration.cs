@@ -16,7 +16,6 @@ namespace Enyim.Caching.Configuration
 		private TimeSpan deadTimeout = new TimeSpan(0, 0, 10);
 		private TimeSpan queueTimeout = new TimeSpan(0, 0, 0, 0, 100);
 		private INodeFailurePolicyFactory policyFactory = new FailImmediatelyPolicyFactory();
-		private bool enableTimeoutDiagnostics;
 
 		int ISocketPoolConfiguration.MinPoolSize
 		{
@@ -106,11 +105,6 @@ namespace Enyim.Caching.Configuration
 			}
 		}
 
-		bool ISocketPoolConfiguration.EnableTimeoutDiagnostics
-		{
-			get { return this.enableTimeoutDiagnostics; }
-			set { this.enableTimeoutDiagnostics = value; }
-		}
 	}
 }
 
