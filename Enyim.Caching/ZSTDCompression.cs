@@ -25,7 +25,7 @@ public static class ZSTDCompression
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Compression failed.");
+            _logger?.LogError(ex, "Compression failed for key: {key}", key);
             return data;
         }
     }
@@ -52,7 +52,7 @@ public static class ZSTDCompression
             }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Decompression failed.");
+            _logger?.LogError(ex, "Decompression failed for key: {key}", key);
             return data;
         }
     }

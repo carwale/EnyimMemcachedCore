@@ -13,15 +13,12 @@ using Microsoft.Extensions.Logging;
 using Dawn.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Reflection;
-using System.ComponentModel;
-
 namespace Enyim.Caching.Memcached
 {
     [DebuggerDisplay("[ Address: {endpoint}, IsAlive = {IsAlive} ]")]
     public partial class PooledSocket : IDisposable
     {
         private readonly ILogger _logger;
-        private readonly bool _enableTimeoutDiagnostics;
 
         private bool isAlive;
         private Socket socket;
@@ -31,10 +28,9 @@ namespace Enyim.Caching.Memcached
         private AsyncSocketHelper helper;
         public DateTime LastConnectionTimestamp { get; set; }
 
-        public PooledSocket(EndPoint endpoint, TimeSpan connectionTimeout, TimeSpan receiveTimeout, ILogger logger, bool enableTimeoutDiagnostics = false)
+        public PooledSocket(EndPoint endpoint, TimeSpan connectionTimeout, TimeSpan receiveTimeout, ILogger logger)
         {
             _logger = logger;
-            _enableTimeoutDiagnostics = enableTimeoutDiagnostics;
 
             this.isAlive = true;
 
@@ -84,22 +80,11 @@ namespace Enyim.Caching.Memcached
             args.RemoteEndPoint = endpoint;
             args.Completed += OnConnectCompleted;
             args.UserToken = completed;
-
-            int correlationId = Random.Shared.Next(1, int.MaxValue);
-            var connectDiagnosticsEventId = new EventId(correlationId, "ConnectWithTimeout");
-            _logger.LogWarning(connectDiagnosticsEventId, "ConnectWithTimeout: before ConnectAsync at {Timestamp}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
             bool completedAsync = socket.ConnectAsync(args);
-            _logger.LogWarning(connectDiagnosticsEventId, "ConnectWithTimeout: after ConnectAsync at {Timestamp}, completedAsync={CompletedAsync}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"), completedAsync);
             if (!completedAsync)
-            {
                 OnConnectCompleted(null, args);
-            }
-            _logger.LogWarning(connectDiagnosticsEventId, "ConnectWithTimeout: before WaitOne at {Timestamp}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
-            bool completedInTime = completed.WaitOne(timeout);
-            _logger.LogWarning(connectDiagnosticsEventId, "ConnectWithTimeout: after WaitOne at {Timestamp}, completedInTime={CompletedInTime}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"), completedInTime);
-            if (!completedInTime)
+            if (!completed.WaitOne(timeout))
             {
-                RunTimeoutDiagnostics(endpoint);
                 using (socket)
                 {
                     throw new TimeoutException($"Connection timed out after {timeout}ms while connecting to {endpoint}");
@@ -133,120 +118,6 @@ namespace Enyim.Caching.Memcached
             LastConnectionTimestamp = DateTime.UtcNow;
             EventWaitHandle handle = (EventWaitHandle)args.UserToken;
             handle.Set();
-        }
-
-        private static void GetHostAndPort(EndPoint endpoint, out string host, out int port)
-        {
-            if (endpoint is IPEndPoint ip)
-            {
-                host = ip.Address.ToString();
-                port = ip.Port;
-                return;
-            }
-            if (endpoint is DnsEndPoint dns)
-            {
-                host = dns.Host;
-                port = dns.Port;
-                return;
-            }
-            host = endpoint?.ToString() ?? "?";
-            port = 0;
-        }
-
-        private void RunTimeoutDiagnostics(EndPoint endpoint)
-        {
-            GetHostAndPort(endpoint, out string host, out int port);
-
-            _logger.LogWarning("Connection timeout to {Endpoint}. Running diagnostics.", endpoint);
-
-            try
-            {
-                RunInProcessDiagnostics(endpoint, host);
-                if (_enableTimeoutDiagnostics)
-                {
-                    RunShellDiagnostics(host, port);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Timeout diagnostics failed.");
-            }
-        }
-
-        private void RunInProcessDiagnostics(EndPoint endpoint, string host)
-        {
-            if (endpoint is DnsEndPoint)
-            {
-                try
-                {
-                    var addresses = Dns.GetHostAddresses(host);
-                    var ipv4 = addresses.FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork);
-                    _logger.LogWarning("[TimeoutDiagnostics] DNS resolve for {Host}: {Count} address(es), IPv4={IPv4}", host, addresses.Length, ipv4?.ToString() ?? "none");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "[TimeoutDiagnostics] DNS resolve for {Host} failed.", host);
-                }
-            }
-        }
-
-        private void RunShellDiagnostics(string host, int port)
-        {
-            const int commandTimeoutMs = 5000;
-            bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-
-            RunShellCommand("ping", isWindows ? $"-n 3 {host}" : $"-c 3 {host}", commandTimeoutMs, "Ping");
-            RunShellCommand(isWindows ? "powershell" : "nc", isWindows ? $"-Command \"Test-NetConnection -ComputerName {host} -Port {port} -WarningAction SilentlyContinue | Format-List\"" : $"-vz -w 2 {host} {port}", commandTimeoutMs, "PortCheck");
-            RunShellCommand(isWindows ? "tracert" : "traceroute", isWindows ? $"-d -h 10 {host}" : $"-m 10 {host}", commandTimeoutMs, "Traceroute");
-        }
-
-        private void RunShellCommand(string fileName, string arguments, int timeoutMs, string label)
-        {
-            _logger.LogWarning("[TimeoutDiagnostics] {Label}: Running: {FileName} {Arguments}", label, fileName, arguments);
-            try
-            {
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = fileName,
-                    Arguments = arguments,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                using (var process = Process.Start(startInfo))
-                {
-                    if (process == null)
-                    {
-                        _logger.LogWarning("[TimeoutDiagnostics] {Label}: Could not start process.", label);
-                        return;
-                    }
-                    var output = new StringBuilder();
-                    var err = new StringBuilder();
-                    process.OutputDataReceived += (_, e) => { if (e.Data != null) output.AppendLine(e.Data); };
-                    process.ErrorDataReceived += (_, e) => { if (e.Data != null) err.AppendLine(e.Data); };
-                    process.BeginOutputReadLine();
-                    process.BeginErrorReadLine();
-                    if (!process.WaitForExit(timeoutMs))
-                    {
-                        try { process.Kill(); } catch { }
-                        _logger.LogWarning("[TimeoutDiagnostics] {Label}: Timed out after {Ms}ms.", label, timeoutMs);
-                        return;
-                    }
-                    if (output.Length > 0 || err.Length > 0)
-                        _logger.LogWarning("[TimeoutDiagnostics] {Label}: ExitCode={ExitCode}. Stdout: {Stdout} Stderr: {Stderr}", label, process.ExitCode, output.ToString().Trim(), err.ToString().Trim());
-                    else
-                        _logger.LogWarning("[TimeoutDiagnostics] {Label}: ExitCode={ExitCode}.", label, process.ExitCode);
-                }
-            }
-            catch (Win32Exception ex) when (ex.NativeErrorCode == 2)
-            {
-                _logger.LogWarning("[TimeoutDiagnostics] {Label}: Command not found ({FileName}).", label, fileName);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "[TimeoutDiagnostics] {Label}: Failed to run.", label);
-            }
         }
 
         public Action<PooledSocket> CleanupCallback { get; set; }
