@@ -82,6 +82,14 @@ namespace Enyim.Caching.Configuration
 
                 SocketPool.QueueTimeout = options.SocketPool.QueueTimeout;
                 _logger.LogInformation($"{nameof(SocketPool.QueueTimeout)}: {SocketPool.QueueTimeout}");
+
+                if (options.SocketPool.FailureThreshold > 0)
+                {
+                    SocketPool.FailurePolicyFactory = new ThrottlingFailurePolicyFactory(
+                        options.SocketPool.FailureThreshold,
+                        options.SocketPool.FailureResetAfter);
+                    _logger.LogInformation($"FailurePolicy: ThrottlingFailurePolicy threshold={options.SocketPool.FailureThreshold} resetAfter={options.SocketPool.FailureResetAfter}");
+                }
             }
 
             Protocol = options.Protocol;

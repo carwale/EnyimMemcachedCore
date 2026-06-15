@@ -68,6 +68,18 @@ namespace Enyim.Caching.Configuration
         public TimeSpan DeadTimeout { get; set; } = new TimeSpan(0, 0, 10);
         public TimeSpan QueueTimeout { get; set; } = new TimeSpan(0, 0, 0, 0, 100);
 
+        /// <summary>
+        /// Number of failures within <see cref="FailureResetAfter"/> before the node is marked dead.
+        /// Set to 0 (default) to use FailImmediately behaviour.
+        /// </summary>
+        public int FailureThreshold { get; set; } = 0;
+
+        /// <summary>
+        /// Time window in which <see cref="FailureThreshold"/> failures must occur to mark the node dead.
+        /// Only used when FailureThreshold > 0.
+        /// </summary>
+        public TimeSpan FailureResetAfter { get; set; } = TimeSpan.Zero;
+
         public void CheckPoolSize()
         {
             if (MinPoolSize < 0)

@@ -1,7 +1,5 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using Enyim.Caching.Configuration;
 
 namespace Enyim.Caching.Memcached
@@ -18,6 +16,7 @@ namespace Enyim.Caching.Memcached
 		private int failureThreshold;
 		private DateTime lastFailed;
 		private int failCounter;
+		private readonly object _lock = new object();
 
 		/// <summary>
 		/// Creates a new instance of <see cref="T:ThrottlingFailurePolicy"/>.
@@ -32,49 +31,52 @@ namespace Enyim.Caching.Memcached
 
 		bool INodeFailurePolicy.ShouldFail()
 		{
-			var now = DateTime.UtcNow;
-
-			if (lastFailed == DateTime.MinValue)
+			lock (_lock)
 			{
+				var now = DateTime.UtcNow;
+
+				if (lastFailed == DateTime.MinValue)
+				{
 				if (LogIsDebugEnabled) log.Debug("Setting fail counter to 1.");
 
-				failCounter = 1;
-			}
-			else
-			{
-				var diff = (int)(now - lastFailed).TotalMilliseconds;
+					failCounter = 1;
+				}
+				else
+				{
+					var diff = (int)(now - lastFailed).TotalMilliseconds;
 				if (LogIsDebugEnabled) log.DebugFormat("Last fail was {0} msec ago with counter {1}.", diff, this.failCounter);
 
 				if (diff <= this.resetAfter)
 					this.failCounter++;
-				else
+					else
 				{
 					this.failCounter = 1;
 				}
-			}
+				}
 
-			lastFailed = now;
+				lastFailed = now;
 
-			if (this.failCounter == this.failureThreshold)
-			{
+				if (this.failCounter >= this.failureThreshold)
+				{
 				if (LogIsDebugEnabled) log.DebugFormat("Threshold reached, node will fail.");
 
 				this.lastFailed = DateTime.MinValue;
 				this.failCounter = 0;
 
-				return true;
-			}
+					return true;
+				}
 
 			if (LogIsDebugEnabled) log.DebugFormat("Current counter is {0}, threshold not reached.", this.failCounter);
 
-			return false;
+				return false;
+			}
 		}
 	}
 
 	/// <summary>
 	/// Creates instances of <see cref="T:ThrottlingFailurePolicy"/>.
 	/// </summary>
-	public class ThrottlingFailurePolicyFactory : INodeFailurePolicyFactory, IProviderFactory<INodeFailurePolicyFactory>
+	public class ThrottlingFailurePolicyFactory : INodeFailurePolicyFactory, IProvider
 	{
 		public ThrottlingFailurePolicyFactory(int failureThreshold, TimeSpan resetAfter)
 			: this(failureThreshold, (int)resetAfter.TotalMilliseconds) { }
@@ -89,23 +91,18 @@ namespace Enyim.Caching.Memcached
 		internal ThrottlingFailurePolicyFactory() { }
 
 		/// <summary>
-		/// Gets or sets the amount of time of in milliseconds after the failure counter is reset.
+		/// Gets or sets the amount of time in milliseconds after which the failure counter is reset.
 		/// </summary>
 		public int ResetAfter { get; private set; }
 
 		/// <summary>
-		/// Gets or sets the number of failures that must happen in a time window to make a node marked as failed.
+		/// Gets or sets the number of failures that must happen in a time window to mark a node as failed.
 		/// </summary>
 		public int FailureThreshold { get; private set; }
 
 		INodeFailurePolicy INodeFailurePolicyFactory.Create(IMemcachedNode node)
 		{
 			return new ThrottlingFailurePolicy(this.ResetAfter, this.FailureThreshold);
-		}
-
-		INodeFailurePolicyFactory IProviderFactory<INodeFailurePolicyFactory>.Create()
-		{
-			return new ThrottlingFailurePolicyFactory(this.FailureThreshold, this.ResetAfter);
 		}
 
 		void IProvider.Initialize(Dictionary<string, string> parameters)
@@ -127,20 +124,20 @@ namespace Enyim.Caching.Memcached
 
 #region [ License information          ]
 /* ************************************************************
- * 
+ *
  *    Copyright (c) 2011 Attila Kiskó, enyim.com
- *    
+ *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
  *    You may obtain a copy of the License at
- *    
+ *
  *        http://www.apache.org/licenses/LICENSE-2.0
- *    
+ *
  *    Unless required by applicable law or agreed to in writing, software
  *    distributed under the License is distributed on an "AS IS" BASIS,
  *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  *    See the License for the specific language governing permissions and
  *    limitations under the License.
- *    
+ *
  * ************************************************************/
 #endregion
