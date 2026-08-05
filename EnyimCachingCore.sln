@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26228.9
@@ -10,6 +10,8 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Enyim.Caching.Tests", "Enyim.Caching.Tests\Enyim.Caching.Tests.csproj", "{FAF5E655-9ED4-4934-94F9-F0EDB77143AC}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MemcachedTest", "MemcachedTest\MemcachedTest.csproj", "{3DDAC26F-8B56-4F69-8C69-A3CB6CF6B12B}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HashRingResolver", "HashRingResolver\HashRingResolver.csproj", "{B7E8F901-2A3C-4D5E-8F67-89A0B1C2D3E4}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{597372A2-9EE1-4A10-96FE-9D4E3AC85676}"
 EndProject
@@ -39,6 +41,10 @@ Global
 		{3DDAC26F-8B56-4F69-8C69-A3CB6CF6B12B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3DDAC26F-8B56-4F69-8C69-A3CB6CF6B12B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3DDAC26F-8B56-4F69-8C69-A3CB6CF6B12B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B7E8F901-2A3C-4D5E-8F67-89A0B1C2D3E4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B7E8F901-2A3C-4D5E-8F67-89A0B1C2D3E4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B7E8F901-2A3C-4D5E-8F67-89A0B1C2D3E4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B7E8F901-2A3C-4D5E-8F67-89A0B1C2D3E4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -48,5 +54,6 @@ Global
 		{7F795CB9-6058-4137-B069-12C1B8D4132B} = {9954C92E-50E2-477C-AC47-31C857C46370}
 		{FAF5E655-9ED4-4934-94F9-F0EDB77143AC} = {46CD2BBA-9846-42FA-823B-D03F68F81647}
 		{3DDAC26F-8B56-4F69-8C69-A3CB6CF6B12B} = {46CD2BBA-9846-42FA-823B-D03F68F81647}
+		{B7E8F901-2A3C-4D5E-8F67-89A0B1C2D3E4} = {9954C92E-50E2-477C-AC47-31C857C46370}
 	EndGlobalSection
 EndGlobal

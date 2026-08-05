@@ -7,7 +7,7 @@ namespace Enyim.Caching.Memcached
     /// Uses a struct to minimize memory footprint.
     /// </summary>
     /// <typeparam name="T">The type of the cached value.</typeparam>
-    public struct CacheValue<T>
+    public readonly struct CacheValue<T>
     {
         private readonly T _value;
         private readonly bool _isCritical;
