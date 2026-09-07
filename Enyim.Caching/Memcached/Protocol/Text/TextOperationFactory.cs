@@ -30,6 +30,11 @@ namespace Enyim.Caching.Memcached.Protocol.Text
 			return new DeleteOperation(key);
 		}
 
+		IMultiDeleteOperation IOperationFactory.MultiDelete(IList<string> keys)
+		{
+			throw new NotImplementedException("Text protocol does not support multi-delete.");
+		}
+
 		IMutatorOperation IOperationFactory.Mutate(MutationMode mode, string key, ulong defaultValue, ulong delta, uint expires, ulong cas)
 		{
 			if (cas > 0) throw new NotSupportedException("Text protocol does not support " + mode + " with cas.");

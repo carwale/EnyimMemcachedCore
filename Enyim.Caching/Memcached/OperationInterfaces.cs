@@ -59,6 +59,10 @@ namespace Enyim.Caching.Memcached
     {
     }
 
+    public interface IMultiDeleteOperation : IMultiItemOperation
+    {
+    }
+
     public interface IConcatOperation : ISingleItemOperation
     {
         ConcatenationMode Mode { get; }

@@ -12,6 +12,7 @@ namespace Enyim.Caching.Memcached
 
 		IStoreOperation Store(StoreMode mode, string key, CacheItem value, uint expires, ulong cas);
 		IDeleteOperation Delete(string key, ulong cas);
+		IMultiDeleteOperation MultiDelete(IList<string> keys);
 		IMutatorOperation Mutate(MutationMode mode, string key, ulong defaultValue, ulong delta, uint expires, ulong cas);
 		IConcatOperation Concat(ConcatenationMode mode, string key, ulong cas, ArraySegment<byte> data);
 

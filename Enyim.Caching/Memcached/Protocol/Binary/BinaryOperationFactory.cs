@@ -36,6 +36,11 @@ namespace Enyim.Caching.Memcached.Protocol.Binary
 			return new DeleteOperation(key) { Cas = cas };
 		}
 
+		IMultiDeleteOperation IOperationFactory.MultiDelete(IList<string> keys)
+		{
+			return new MultiDeleteOperation(keys);
+		}
+
 		IMutatorOperation IOperationFactory.Mutate(MutationMode mode, string key, ulong defaultValue, ulong delta, uint expires, ulong cas)
 		{
 			return new MutatorOperation(mode, key, defaultValue, delta, expires) { Cas = cas };

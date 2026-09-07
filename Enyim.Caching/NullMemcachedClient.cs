@@ -215,6 +215,16 @@ namespace Enyim.Caching
             return Task.FromResult<bool>(false);
         }
 
+        public bool Remove(IEnumerable<string> keys)
+        {
+            return true;
+        }
+
+        public Task<bool> RemoveAsync(IEnumerable<string> keys)
+        {
+            return Task.FromResult(true);
+        }
+
         public ServerStats Stats()
         {
             return new ServerStats(new Dictionary<EndPoint, Dictionary<string, string>>());

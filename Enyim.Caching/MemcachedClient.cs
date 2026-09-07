@@ -1463,6 +1463,24 @@ namespace Enyim.Caching
         }
 
         /// <summary>
+        /// Removes the specified items from the cache in one pipelined write per server.
+        /// Missing keys do not abort the batch.
+        /// </summary>
+        public bool Remove(IEnumerable<string> keys)
+        {
+            return PerformMultiRemove(keys);
+        }
+
+        /// <summary>
+        /// Removes the specified items from the cache in one pipelined write per server.
+        /// Missing keys do not abort the batch.
+        /// </summary>
+        public Task<bool> RemoveAsync(IEnumerable<string> keys)
+        {
+            return PerformMultiRemoveAsync(keys);
+        }
+
+        /// <summary>
         /// Retrieves multiple items from the cache.
         /// </summary>
         /// <param name="keys">The list of identifiers for the items to retrieve.</param>
@@ -1696,6 +1714,122 @@ namespace Enyim.Caching
                 return localRetval;
             }
             return [];
+        }
+
+        protected virtual bool PerformMultiRemove(IEnumerable<string> keys)
+        {
+            if (keys == null) throw new ArgumentNullException(nameof(keys));
+
+#if NET6_0
+            using var activity = ActivitySourceHelper.StartActivity("PerformMultiRemove");
+#endif
+            var hashed = new Dictionary<string, string>();
+            foreach (var key in keys)
+            {
+                hashed[this.keyTransformer.Transform(key)] = key;
+            }
+
+            if (hashed.Count == 0) return true;
+
+            var byServer = GroupByServer(hashed.Keys);
+            if (byServer.Count == 0) return false;
+
+            var failures = 0;
+            var tasks = new List<Task>();
+
+            foreach (var slice in byServer)
+            {
+                var node = slice.Key;
+#if NET6_0
+                activity.AddTagsForKeys(node, keys);
+#endif
+                var nodeKeys = slice.Value;
+                var mdel = this.pool.OperationFactory.MultiDelete(nodeKeys);
+
+                tasks.Add(Task.Run(() =>
+                {
+                    try
+                    {
+                        if (!node.Execute(mdel).Success)
+                            Interlocked.Increment(ref failures);
+                    }
+                    catch (Exception e)
+                    {
+#if NET6_0
+                        activity.SetException(e);
+#endif
+                        Interlocked.Increment(ref failures);
+                        _logger.LogError(0, e, "PerformMultiRemove");
+                    }
+                }));
+            }
+
+            if (tasks.Count > 0)
+            {
+                Task.WaitAll(tasks.ToArray());
+            }
+
+#if NET6_0
+            activity.SetSuccess();
+#endif
+            return failures == 0;
+        }
+
+        protected virtual async Task<bool> PerformMultiRemoveAsync(IEnumerable<string> keys)
+        {
+            if (keys == null) throw new ArgumentNullException(nameof(keys));
+
+#if NET6_0
+            using var activity = ActivitySourceHelper.StartActivity("PerformMultiRemoveAsync");
+#endif
+            var hashed = new Dictionary<string, string>();
+            foreach (var key in keys)
+            {
+                hashed[this.keyTransformer.Transform(key)] = key;
+            }
+
+            if (hashed.Count == 0) return true;
+
+            var byServer = GroupByServer(hashed.Keys);
+            if (byServer.Count == 0) return false;
+
+            var failures = 0;
+            var tasks = new List<Task>();
+
+            foreach (var slice in byServer)
+            {
+                var node = slice.Key;
+#if NET6_0
+                activity.AddTagsForKeys(node, keys);
+#endif
+                var nodeKeys = slice.Value;
+                var mdel = this.pool.OperationFactory.MultiDelete(nodeKeys);
+
+                tasks.Add(Task.Run(async () =>
+                {
+                    try
+                    {
+                        if (!(await node.ExecuteAsync(mdel)).Success)
+                            Interlocked.Increment(ref failures);
+                    }
+                    catch (Exception e)
+                    {
+#if NET6_0
+                        activity.SetException(e);
+#endif
+                        Interlocked.Increment(ref failures);
+                        _logger.LogError(0, e, "PerformMultiRemoveAsync");
+                    }
+                }));
+            }
+
+            await Task.WhenAll(tasks);
+
+#if NET6_0
+            activity.SetSuccess();
+#endif
+            return failures == 0;
+        }
         }
 
         protected Dictionary<IMemcachedNode, IList<string>> GroupByServer(IEnumerable<string> keys)

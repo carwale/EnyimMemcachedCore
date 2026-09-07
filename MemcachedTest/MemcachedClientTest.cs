@@ -122,6 +122,77 @@ namespace MemcachedTest
         }
 
         [Fact]
+        public async Task RemoveMultipleKeysTest()
+        {
+            using (MemcachedClient client = GetClient())
+            {
+                var keys = new List<string>();
+                for (int i = 0; i < 5; i++)
+                {
+                    var key = $"Hello_Multi_Remove_{Guid.NewGuid()}_{i}";
+                    keys.Add(key);
+                    Assert.True(await client.StoreAsync(StoreMode.Set, key, i, DateTime.Now.AddSeconds(30)), "Store of " + key + " failed");
+                }
+
+                Assert.True(await client.RemoveAsync(keys), "Multi-remove failed");
+
+                foreach (var key in keys)
+                {
+                    Assert.Null(client.Get(key));
+                }
+            }
+        }
+
+        [Fact]
+        public async Task RemoveMultipleKeys_FirstMissing_OthersExpire()
+        {
+            using (MemcachedClient client = GetClient())
+            {
+                var keys = new List<string>();
+                for (int i = 0; i < 5; i++)
+                {
+                    keys.Add($"Hello_Multi_Remove_MissingFirst_{Guid.NewGuid()}_{i}");
+                }
+
+                for (int i = 1; i < keys.Count; i++)
+                {
+                    Assert.True(await client.StoreAsync(StoreMode.Set, keys[i], i, DateTime.Now.AddSeconds(30)), "Store of " + keys[i] + " failed");
+                }
+
+                Assert.True(await client.RemoveAsync(keys), "Multi-remove should succeed when the first key is missing");
+
+                for (int i = 1; i < keys.Count; i++)
+                {
+                    Assert.Null(client.Get(keys[i]));
+                }
+            }
+        }
+
+        [Fact]
+        public async Task RemoveMultipleKeys_AllMissing_ReturnsTrue()
+        {
+            using (MemcachedClient client = GetClient())
+            {
+                var keys = new[]
+                {
+                    $"missing_{Guid.NewGuid()}_1",
+                    $"missing_{Guid.NewGuid()}_2"
+                };
+
+                Assert.True(await client.RemoveAsync(keys));
+            }
+        }
+
+        [Fact]
+        public async Task RemoveMultipleKeys_Empty_ReturnsTrue()
+        {
+            using (MemcachedClient client = GetClient())
+            {
+                Assert.True(await client.RemoveAsync(Array.Empty<string>()));
+            }
+        }
+
+        [Fact]
         public async Task StoreStringTest()
         {
             using (MemcachedClient client = GetClient())

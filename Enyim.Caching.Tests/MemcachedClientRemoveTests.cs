@@ -31,5 +31,45 @@ namespace Enyim.Caching.Tests
 			var removeResult = _client.ExecuteRemove(key);
 			Assert.False(removeResult.Success, "Success was true");
 		}
+
+		[Fact]
+		public void When_Removing_Multiple_Keys_Present_Keys_Are_Removed()
+		{
+			var keys = GetUniqueKeys("remove_multi", 5).ToList();
+			foreach (var key in keys)
+			{
+				StoreAssertPass(Store(key: key));
+			}
+
+			Assert.True(_client.Remove(keys));
+
+			foreach (var key in keys)
+			{
+				GetAssertFail(_client.ExecuteGet(key));
+			}
+		}
+
+		[Fact]
+		public void When_First_Key_Is_Missing_Remaining_Keys_Are_Still_Removed()
+		{
+			var keys = GetUniqueKeys("remove_multi_first_missing", 5).ToList();
+			for (int i = 1; i < keys.Count; i++)
+			{
+				StoreAssertPass(Store(key: keys[i]));
+			}
+
+			Assert.True(_client.Remove(keys));
+
+			for (int i = 1; i < keys.Count; i++)
+			{
+				GetAssertFail(_client.ExecuteGet(keys[i]));
+			}
+		}
+
+		[Fact]
+		public void When_Removing_Empty_Key_List_Result_Is_Successful()
+		{
+			Assert.True(_client.Remove(Enumerable.Empty<string>()));
+		}
 	}
 }
